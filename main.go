@@ -13,9 +13,13 @@ func main() {
 	}
 	fmt.Printf("Config before update: %+v\n", cfg)
 
-	err = cfg.SetUser("jacob")
-	if err != nil {
-		log.Fatal(err)
+	appState := &state{Config: &cfg}
+
+	cmds := commands{
+		commands: make(map[string]func(*state, command) error),
 	}
+
+	cmds.register("login", handlerLogin)
+
 	fmt.Printf("Config after update: %+v\n", cfg)
 }
