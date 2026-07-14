@@ -109,6 +109,51 @@ func handlerUsers(s *state, cmd command) error {
 	return nil
 }
 
+func handlerAgg(s *state, cmd command) error {
+	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%+v\n", feed)
+	return nil
+}
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.args) != 2 {
+		return errors.New("the add feed handler expects two arguments")
+	}
+	name := cmd.args[0]
+	url := cmd.args[1]
+
+	user, err := s.db.GetUser(context.Background(), s.Config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		Name:      name,
+		Url:       url,
+		UserID:    user.ID,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%+v\n", feed)
+	return nil
+}
+
+func handlerGetFeeds(s *state, cmd command) error {
+	feeds, err := s.db.GetFeeds(context.Background())
+	if err != nil {
+		return err
+	}
+	for _, feed := range feeds {
+		fmt.Printf("%s (%s) - added by %s\n", feed.FeedName, feed.FeedUrl, feed.Username)
+	}
+	return nil
+}
+
 func main() {
 	cfg, err := config.Read()
 	if err != nil {
@@ -119,7 +164,6 @@ func main() {
 		log.Fatal(err)
 	}
 	dbQueries := database.New(db)
-	fmt.Printf("Config before update: %+v\n", cfg)
 
 	appState := &state{
 		Config: &cfg,
@@ -133,6 +177,9 @@ func main() {
 	cmds.register("register", registerHandler)
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerUsers)
+	cmds.register("agg", handlerAgg)
+	cmds.register("addfeed", handlerAddFeed)
+	cmds.register("feeds", handlerGetFeeds)
 
 	if len(os.Args) < 2 {
 		log.Fatal("usage: cli <command> [args...]")
@@ -142,6 +189,4 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Printf("Config after update: %+v\n", cfg)
 }
