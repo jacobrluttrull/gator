@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"gator/internal/database"
+	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
@@ -46,10 +49,49 @@ func handlerLogin(s *state, cmd command) error {
 	if len(cmd.args) == 0 {
 		return errors.New("the login handler expects a single argument: the username")
 	}
-	if err := s.Config.SetUser(cmd.args[0]); err != nil {
+	name := cmd.args[0]
+
+	_, err := s.db.GetUser(context.Background(), name)
+	if err != nil {
+		fmt.Printf("couldn't find user: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := s.Config.SetUser(name); err != nil {
 		return err
 	}
-	fmt.Printf("Username set to: %s\n", s.Config.CurrentUserName)
+	fmt.Printf("Username set to: %s\n", name)
+	return nil
+}
+func registerHandler(s *state, cmd command) error {
+	if len(cmd.args) == 0 {
+		return errors.New("the register handler expects a single argument: the username")
+	}
+	name := cmd.args[0]
+
+	user, err := s.db.CreateUser(context.Background(), database.CreateUserParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		Name:      name,
+	})
+	if err != nil {
+		return err
+		os.Exit(1)
+	}
+	if err := s.Config.SetUser(user.Name); err != nil {
+		return fmt.Errorf("could not set user %s: %s", user.Name, err)
+	}
+	fmt.Println("User set to: " + user.Name)
+	return nil
+}
+
+func handlerReset(s *state, cmd command) error {
+	err := s.db.DeleteUsers(context.Background())
+	if err != nil {
+		return err
+	}
+	fmt.Println("Users deleted")
 	return nil
 }
 
@@ -65,12 +107,17 @@ func main() {
 	dbQueries := database.New(db)
 	fmt.Printf("Config before update: %+v\n", cfg)
 
-	appState := &state{Config: &cfg}
+	appState := &state{
+		Config: &cfg,
+		db:     dbQueries,
+	}
 
 	cmds := commands{
 		commands: make(map[string]func(*state, command) error),
 	}
 	cmds.register("login", handlerLogin)
+	cmds.register("register", registerHandler)
+	cmds.register("reset", handlerReset)
 
 	if len(os.Args) < 2 {
 		log.Fatal("usage: cli <command> [args...]")
