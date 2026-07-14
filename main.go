@@ -94,6 +94,20 @@ func handlerReset(s *state, cmd command) error {
 	fmt.Println("Users deleted")
 	return nil
 }
+func handlerUsers(s *state, cmd command) error {
+	users, err := s.db.GetUsers(context.Background())
+	if err != nil {
+		return err
+	}
+	for _, name := range users {
+		if name == s.Config.CurrentUserName {
+			fmt.Printf("* %s (current)\n", name)
+		} else {
+			fmt.Printf("* %s\n", name)
+		}
+	}
+	return nil
+}
 
 func main() {
 	cfg, err := config.Read()
@@ -118,6 +132,7 @@ func main() {
 	cmds.register("login", handlerLogin)
 	cmds.register("register", registerHandler)
 	cmds.register("reset", handlerReset)
+	cmds.register("users", handlerUsers)
 
 	if len(os.Args) < 2 {
 		log.Fatal("usage: cli <command> [args...]")
