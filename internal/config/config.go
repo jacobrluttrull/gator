@@ -2,8 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -13,33 +11,6 @@ const configFileName = ".gatorconfig.json"
 type Config struct {
 	DBURL           string `json:"db_url"`
 	CurrentUserName string `json:"current_user_name"`
-}
-
-type state struct {
-	Config *Config
-}
-
-type command struct {
-	name string   `json:"name"`
-	args []string `json:"args"`
-}
-
-type commands struct {
-	commands map[string]func(*state, command) error
-}
-
-// command methods
-
-func (c *commands) run(s *state, cmd command) error {
-	f, ok := c.commands[cmd.name]
-	if !ok {
-		return errors.New("unknown command: " + cmd.name)
-	}
-	return f(s, cmd)
-}
-
-func (c *commands) register(name string, f func(*state, command) error) {
-	c.commands[name] = f
 }
 
 func getConfigFilePath() (string, error) {
@@ -65,8 +36,8 @@ func Read() (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
-
 }
+
 func write(cfg Config) error {
 	fullPath, err := getConfigFilePath()
 	if err != nil {
@@ -82,19 +53,8 @@ func write(cfg Config) error {
 	}
 	return nil
 }
+
 func (c *Config) SetUser(username string) error {
 	c.CurrentUserName = username
 	return write(*c)
-}
-
-func handlerLogin(s *state, cmd command) error {
-	if len(cmd.args) == 0 {
-		return errors.New("The login handler expects a single arguement: the username.")
-	}
-	err := s.Config.SetUser(cmd.args[0])
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Username set to: %s\n", s.Config.CurrentUserName)
-	return nil
 }

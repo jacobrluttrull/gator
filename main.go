@@ -1,6 +1,13 @@
 package main
 
 import (
+	"database/sql"
+	"gator/internal/database"
+
+	_ "github.com/lib/pq"
+)
+
+import (
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +18,7 @@ import (
 
 type state struct {
 	Config *config.Config
+	db     *database.Queries
 }
 
 type command struct {
@@ -50,6 +58,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	db, err := sql.Open("postgres", cfg.DBURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dbQueries := database.New(db)
 	fmt.Printf("Config before update: %+v\n", cfg)
 
 	appState := &state{Config: &cfg}
