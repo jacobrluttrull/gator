@@ -13,6 +13,13 @@ func TestFetchFeed(t *testing.T) {
 	}{
 		{name: "TechCrunch", url: "https://techcrunch.com/feed/"},
 		{name: "Hacker News", url: "https://news.ycombinator.com/rss"},
+		{name: "Lane Wagner's Blog", url: "https://www.wagslane.dev/index.xml"},
+		{name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index"},
+		{name: "NPR", url: "https://feeds.npr.org/1001/rss.xml"},
+		{name: "NASA Breaking News", url: "https://www.nasa.gov/feed/"},
+		{name: "Smashing Magazine", url: "https://www.smashingmagazine.com/feed/"},
+		{name: "CSS-Tricks", url: "https://css-tricks.com/feed/"},
+		{name: "Krebs on Security", url: "https://krebsonsecurity.com/feed/"},
 	}
 
 	for _, tt := range tests {

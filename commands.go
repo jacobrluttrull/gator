@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"gator/internal/config"
-	"gator/internal/database"
+	"github.com/jacobrluttrull/gator/internal/config"
+	"github.com/jacobrluttrull/gator/internal/database"
 )
 
 type state struct {
