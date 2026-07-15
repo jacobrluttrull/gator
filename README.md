@@ -52,7 +52,7 @@ gator agg 1m
 
 - `register <name>` — create a new user and log in as them
 - `login <name>` — switch the current user
-- `addfeed <name> <url>` — add a new RSS feed and automatically follow it
+- `addFeed <name> <url>` — add a new RSS feed and automatically follow it
 - `follow <url>` / `unfollow <url>` — follow or unfollow an existing feed
 - `following` — list the feeds you're currently following
 - `feeds` — list every feed that's been added, and who added it
