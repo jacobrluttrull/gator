@@ -86,17 +86,13 @@ func handlerAgg(s *state, cmd command) error {
 	return nil
 }
 
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 2 {
 		return errors.New("the add feed handler expects two arguments")
 	}
 	name := cmd.args[0]
 	url := cmd.args[1]
 
-	user, err := s.db.GetUser(context.Background(), s.Config.CurrentUserName)
-	if err != nil {
-		return err
-	}
 	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID:        uuid.New(),
 		CreatedAt: time.Now().UTC(),
@@ -135,16 +131,12 @@ func handlerGetFeeds(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 1 {
 		return errors.New("the follow handler expects one argument")
 	}
 	url := cmd.args[0]
 
-	user, err := s.db.GetUser(context.Background(), s.Config.CurrentUserName)
-	if err != nil {
-		return err
-	}
 	feed, err := s.db.GetFeedByUrl(context.Background(), url)
 	if err != nil {
 		return err
@@ -160,14 +152,10 @@ func handlerFollow(s *state, cmd command) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s is now following%s\n", feedFollow.UserName, feedFollow.FeedName)
+	fmt.Printf("%s is now following %s\n", feedFollow.UserName, feedFollow.FeedName)
 	return nil
 }
-func handlerFollowing(s *state, cmd command) error {
-	user, err := s.db.GetUser(context.Background(), s.Config.CurrentUserName)
-	if err != nil {
-		return err
-	}
+func handlerFollowing(s *state, cmd command, user database.User) error {
 	feedFollows, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
 	if err != nil {
 		return err
@@ -176,4 +164,21 @@ func handlerFollowing(s *state, cmd command) error {
 		fmt.Println(ff.FeedName)
 	}
 	return nil
+}
+func handlerUnfollow(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 1 {
+		return errors.New("the unfollow handler expects one argument")
+	}
+	url := cmd.args[0]
+
+	feed, err := s.db.GetFeedByUrl(context.Background(), url)
+
+	if err != nil {
+		return err
+	}
+	return s.db.DeleteFeedFollow(context.Background(), database.DeleteFeedFollowParams{
+		UserID: user.ID,
+		FeedID: feed.ID,
+	})
+
 }
