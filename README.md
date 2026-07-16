@@ -57,4 +57,6 @@ gator agg 1m
 - `following` — list the feeds you're currently following
 - `feeds` — list every feed that's been added, and who added it
 - `agg <time_between_reqs>` — continuously fetch the least-recently-updated feed on a timer (e.g. `gator agg 1m`); leave this running in a terminal to keep collecting posts, stop it with `Ctrl+C`
-- `browse [limit]` — print the most recent posts from feeds you follow (defaults to 2)
+- `browse [limit] [asc] [page]` — print posts from feeds you follow, newest first by default (e.g. `gator browse 5 asc 2` for page 2, oldest-first, 5 per page)
+- `bookmark <post_url>` / `unbookmark <post_url>` — bookmark or remove a bookmark on a post
+- `bookmarks` — list your bookmarked posts
