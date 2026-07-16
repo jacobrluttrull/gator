@@ -44,7 +44,7 @@ Once installed and configured, run commands like:
 
 ```
 gator register myusername
-gator addfeed "Hacker News" "https://news.ycombinator.com/rss"
+gator addFeed "Hacker News" "https://news.ycombinator.com/rss"
 gator agg 1m
 ```
 
@@ -60,3 +60,4 @@ gator agg 1m
 - `browse [limit] [asc] [page]` — print posts from feeds you follow, newest first by default (e.g. `gator browse 5 asc 2` for page 2, oldest-first, 5 per page)
 - `bookmark <post_url>` / `unbookmark <post_url>` — bookmark or remove a bookmark on a post
 - `bookmarks` — list your bookmarked posts
+- `search <term> [limit]` — fuzzy-search the titles of posts from feeds you follow (defaults to 5 results)

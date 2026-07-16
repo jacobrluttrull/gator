@@ -4,7 +4,6 @@ Not implemented yet — just notes for future work.
 
 ## Up next
 
-- Add a `search` command that allows for fuzzy searching of posts
 - Add an HTTP API (and authentication/authorization) that allows other users to interact with the service remotely
 - Write a service manager that keeps the `agg` command running in the background and restarts it if it crashes
 
