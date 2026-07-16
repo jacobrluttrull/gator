@@ -43,6 +43,7 @@ func main() {
 			"bookmark":   middlewareLoggedIn(handlerBookmark),
 			"unbookmark": middlewareLoggedIn(handlerUnbookmark),
 			"bookmarks":  middlewareLoggedIn(handlerBookmarks),
+			"search":     middlewareLoggedIn(handlerSearchPosts),
 		},
 	}
 

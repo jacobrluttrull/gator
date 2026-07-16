@@ -282,3 +282,33 @@ func handlerBookmarks(s *state, cmd command, user database.User) error {
 	}
 	return nil
 }
+
+func handlerSearchPosts(s *state, cmd command, user database.User) error {
+	if len(cmd.args) < 1 {
+		return errors.New("the search handler expects at least one argument: the search term")
+	}
+	term := cmd.args[0]
+
+	limit := 5
+	if len(cmd.args) >= 2 {
+		parsed, err := strconv.Atoi(cmd.args[1])
+		if err != nil {
+			return fmt.Errorf("invalid limit: %w", err)
+		}
+		limit = parsed
+	}
+
+	posts, err := s.db.SearchPosts(context.Background(), database.SearchPostsParams{
+		UserID: user.ID,
+		Lower:  term,
+		Limit:  int32(limit),
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, post := range posts {
+		fmt.Printf("%s (%.2f match)\n%s\n\n", post.Title, post.Sim, post.Url)
+	}
+	return nil
+}
