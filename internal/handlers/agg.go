@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jacobrluttrull/gator/internal/cli"
@@ -21,6 +22,8 @@ func Agg(s *cli.State, cmd cli.Command) error {
 
 	ticker := time.NewTicker(timeBetweenRequests)
 	for ; ; <-ticker.C {
-		scraper.Scrape(s)
+		if err := scraper.Scrape(s); err != nil {
+			log.Printf("scrape failed: %v", err)
+		}
 	}
 }
