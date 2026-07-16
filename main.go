@@ -29,17 +29,20 @@ func main() {
 
 	cmds := commands{
 		commands: map[string]func(*state, command) error{
-			"login":     handlerLogin,
-			"register":  registerHandler,
-			"reset":     handlerReset,
-			"users":     handlerUsers,
-			"agg":       handlerAgg,
-			"addFeed":   middlewareLoggedIn(handlerAddFeed),
-			"feeds":     handlerGetFeeds,
-			"follow":    middlewareLoggedIn(handlerFollow),
-			"following": middlewareLoggedIn(handlerFollowing),
-			"unfollow":  middlewareLoggedIn(handlerUnfollow),
-			"browse":    middlewareLoggedIn(handlerBrowse),
+			"login":      handlerLogin,
+			"register":   registerHandler,
+			"reset":      handlerReset,
+			"users":      handlerUsers,
+			"agg":        handlerAgg,
+			"addFeed":    middlewareLoggedIn(handlerAddFeed),
+			"feeds":      handlerGetFeeds,
+			"follow":     middlewareLoggedIn(handlerFollow),
+			"following":  middlewareLoggedIn(handlerFollowing),
+			"unfollow":   middlewareLoggedIn(handlerUnfollow),
+			"browse":     middlewareLoggedIn(handlerBrowse),
+			"bookmark":   middlewareLoggedIn(handlerBookmark),
+			"unbookmark": middlewareLoggedIn(handlerUnbookmark),
+			"bookmarks":  middlewareLoggedIn(handlerBookmarks),
 		},
 	}
 

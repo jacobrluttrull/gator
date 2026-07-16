@@ -17,16 +17,17 @@ from posts
 inner join feed_follows on posts.feed_id = feed_follows.feed_id
 where feed_follows.user_id = $1
 order by posts.published_at asc
-limit $2
+limit $2 offset $3
 `
 
 type GetPostsForUserAscParams struct {
 	UserID uuid.UUID
 	Limit  int32
+	Offset int32
 }
 
 func (q *Queries) GetPostsForUserAsc(ctx context.Context, arg GetPostsForUserAscParams) ([]Post, error) {
-	rows, err := q.db.QueryContext(ctx, getPostsForUserAsc, arg.UserID, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, getPostsForUserAsc, arg.UserID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

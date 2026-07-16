@@ -202,23 +202,81 @@ func handlerBrowse(s *state, cmd command, user database.User) error {
 
 	ascending := len(cmd.args) >= 2 && cmd.args[1] == "asc"
 
+	page := 1
+	if len(cmd.args) >= 3 {
+		parsed, err := strconv.Atoi(cmd.args[2])
+		if err != nil {
+			return fmt.Errorf("invalid page: %w", err)
+		}
+		page = parsed
+	}
+	offset := (page - 1) * limit
 	var posts []database.Post
 	var err error
 	if ascending {
 		posts, err = s.db.GetPostsForUserAsc(context.Background(), database.GetPostsForUserAscParams{
 			UserID: user.ID,
 			Limit:  int32(limit),
+			Offset: int32(offset),
 		})
 	} else {
 		posts, err = s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
 			UserID: user.ID,
 			Limit:  int32(limit),
+			Offset: int32(offset),
 		})
 	}
 	if err != nil {
 		return err
 	}
 
+	for _, post := range posts {
+		fmt.Printf("%s\n%s\n\n", post.Title, post.Url)
+	}
+	return nil
+}
+
+func handlerBookmark(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 1 {
+		return errors.New("the bookmark handler expects one argument: the post url")
+	}
+	post, err := s.db.GetPostByUrl(context.Background(), cmd.args[0])
+	if err != nil {
+		return err
+	}
+	bookmark, err := s.db.CreateBookmark(context.Background(), database.CreateBookmarkParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		UserID:    user.ID,
+		PostID:    post.ID,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Bookmarked: %s\n", bookmark.PostTitle)
+	return nil
+}
+
+func handlerUnbookmark(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 1 {
+		return errors.New("the unbookmark handler expects one argument: the post url")
+	}
+	post, err := s.db.GetPostByUrl(context.Background(), cmd.args[0])
+	if err != nil {
+		return err
+	}
+	return s.db.DeleteBookmark(context.Background(), database.DeleteBookmarkParams{
+		UserID: user.ID,
+		PostID: post.ID,
+	})
+}
+
+func handlerBookmarks(s *state, cmd command, user database.User) error {
+	posts, err := s.db.GetBookmarksForUser(context.Background(), user.ID)
+	if err != nil {
+		return err
+	}
 	for _, post := range posts {
 		fmt.Printf("%s\n%s\n\n", post.Title, post.Url)
 	}
