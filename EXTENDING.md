@@ -2,7 +2,6 @@
 
 Not implemented yet — just notes for future work.
 
-- Add sorting and filtering options to the `browse` command
 - Add pagination to the `browse` command
 - Add concurrency to the `agg` command so that it can fetch more frequently
 - Add a `search` command that allows for fuzzy searching of posts

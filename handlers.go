@@ -192,7 +192,7 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 }
 func handlerBrowse(s *state, cmd command, user database.User) error {
 	limit := 2
-	if len(cmd.args) == 1 {
+	if len(cmd.args) >= 1 {
 		parsed, err := strconv.Atoi(cmd.args[0])
 		if err != nil {
 			return fmt.Errorf("invalid limit: %w", err)
@@ -200,10 +200,21 @@ func handlerBrowse(s *state, cmd command, user database.User) error {
 		limit = parsed
 	}
 
-	posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
-		UserID: user.ID,
-		Limit:  int32(limit),
-	})
+	ascending := len(cmd.args) >= 2 && cmd.args[1] == "asc"
+
+	var posts []database.Post
+	var err error
+	if ascending {
+		posts, err = s.db.GetPostsForUserAsc(context.Background(), database.GetPostsForUserAscParams{
+			UserID: user.ID,
+			Limit:  int32(limit),
+		})
+	} else {
+		posts, err = s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+			UserID: user.ID,
+			Limit:  int32(limit),
+		})
+	}
 	if err != nil {
 		return err
 	}
