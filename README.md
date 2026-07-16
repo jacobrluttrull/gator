@@ -16,7 +16,7 @@ Before running `gator`, make sure you have the following installed:
 Install the `gator` binary directly from GitHub with `go install`:
 
 ```
-go install github.com/jacobrluttrull/gator@latest
+go install github.com/jacobrluttrull/gator/cmd/gator@latest
 ```
 
 This puts a `gator` executable in your `$GOPATH/bin` (or `$HOME/go/bin`), so make sure that directory is on your `PATH`.
@@ -61,3 +61,19 @@ gator agg 1m
 - `bookmark <post_url>` / `unbookmark <post_url>` — bookmark or remove a bookmark on a post
 - `bookmarks` — list your bookmarked posts
 - `search <term> [limit]` — fuzzy-search the titles of posts from feeds you follow (defaults to 5 results)
+- `serve <time_between_reqs>` — runs `agg` as a supervised background process, automatically restarting it (with backoff) if it crashes; `Ctrl+C` stops it cleanly
+
+## Project layout
+
+```
+cmd/gator/              entrypoint: config, DB setup, command registration, dispatch
+internal/cli/           State, Command, Commands (registry + dispatch), the LoggedIn middleware
+internal/handlers/      one file per command domain (auth, users, feeds, posts, agg)
+internal/feed/          RSS fetching + XML parsing
+internal/scraper/       pulls the next feed to fetch and saves new posts
+internal/supervisor/    the `serve` process supervisor
+internal/config/        reads/writes ~/.gatorconfig.json
+internal/database/      sqlc-generated query code — do not hand-edit, edit sql/queries/ instead
+sql/schema/             goose migrations
+sql/queries/            sqlc query definitions
+```

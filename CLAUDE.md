@@ -13,29 +13,38 @@ which can then be browsed, searched, and bookmarked from the terminal.
 
 ## File layout
 
-- `main.go` — entrypoint: loads config, opens DB, builds the command map, dispatches
-- `commands.go` — `state`, `command`, `commands` types, `run`, and `middlewareLoggedIn`
-- `handlers.go` — every `handlerX` command implementation
-- `fetchFeed.go` — HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
-- `scrapeFeeds.go` — `scrapFeeds`: pulls the next feed to fetch, marks it fetched, saves new posts
+- `cmd/gator/main.go` — entrypoint: loads config, opens DB, builds the command map, dispatches
+- `internal/cli/` — `State`, `Command`, `Commands` (registry + `Run`), and the `LoggedIn` middleware
+- `internal/handlers/` — command implementations, one file per domain: `auth.go` (login/register),
+  `users.go` (reset/users), `feeds.go` (addFeed/feeds/follow/unfollow/following), `posts.go`
+  (browse/bookmark/unbookmark/bookmarks/search), `agg.go`
+- `internal/feed/` — `Fetch`: HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
+- `internal/scraper/` — `Scrape`: pulls the next feed to fetch, marks it fetched, saves new posts;
+  `ParsePublishedAt` for RSS date parsing
+- `internal/supervisor/` — `Serve`: runs `agg` as a supervised child process with crash-restart + backoff
 - `internal/config/` — reads/writes `~/.gatorconfig.json` (`db_url`, `current_user_name`)
 - `internal/database/` — sqlc-generated code. **Never hand-edit files here** — edit the `.sql` in `sql/queries/` and run `sqlc generate`
 - `sql/schema/` — goose migrations, one file per schema change, timestamp-prefixed
 - `sql/queries/` — one query per file, named to match the query (e.g. `getfeedbyurl.sql` → `GetFeedByUrl`)
+
+Package dependency direction: `cli` has no dependency on the others; `feed` is standalone;
+`scraper` depends on `cli` + `feed` + `database`; `handlers` depends on `cli` + `scraper` +
+`database`; `supervisor` depends on `cli` only (it shells out to the `gator` binary itself for
+`agg`, it doesn't call handlers directly). `cmd/gator` wires all of them together.
 
 ## Command pattern
 
 Every command handler has one of two signatures:
 
 ```go
-func handlerX(s *state, cmd command) error                          // no login required
-func handlerX(s *state, cmd command, user database.User) error      // requires the logged-in user
+func X(s *cli.State, cmd cli.Command) error                          // no login required
+func X(s *cli.State, cmd cli.Command, user database.User) error      // requires the logged-in user
 ```
 
-The second form is wrapped with `middlewareLoggedIn(handlerX)` at registration, which looks up
-the current user (via `s.Config.CurrentUserName`) and injects it — handlers needing "who's
-logged in" never call `GetUser` themselves. Register new commands in the `cmds.commands` map
-literal in `main.go`, not via a loop or repeated calls.
+The second form is wrapped with `cli.LoggedIn(X)` at registration, which looks up the current
+user (via `s.Config.CurrentUserName`) and injects it — handlers needing "who's logged in" never
+call `GetUser` themselves. Register new commands in the `cmds.Handlers` map literal in
+`cmd/gator/main.go`, not via a loop or repeated calls.
 
 ## Database conventions
 
@@ -71,4 +80,11 @@ go build ./...                                    # confirm it compiles after ei
   struct field after the function (`Lower`), not the semantic meaning (`Similarity`) — check
   the generated `.sql.go` file rather than assuming the field name.
 - `agg` runs forever via `time.Ticker` in a `for ; ; <-ticker.C` loop — stop it with `Ctrl+C`.
+  `serve` supervises it as a child process instead and restarts it on crash with backoff.
 - New Postgres extensions/indexes (like `pg_trgm`) are schema migrations (DDL), not queries.
+- Go test files must live in the same directory as the package they test — a top-level `tests/`
+  directory can't reach unexported identifiers (like `supervisor.nextBackoff`) and doesn't work
+  the way it might in other languages. Tests stay next to their package.
+- `go install` now builds from `./cmd/gator`, not the repo root — `go.mod`'s module path
+  (`github.com/jacobrluttrull/gator`) plus the `cmd/gator` subpath is what `go install
+  github.com/jacobrluttrull/gator/cmd/gator@latest` resolves.

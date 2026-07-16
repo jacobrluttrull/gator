@@ -1,4 +1,4 @@
-package main
+package feed
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestFetchFeed(t *testing.T) {
+func TestFetch(t *testing.T) {
 	tests := []struct {
 		name string
 		url  string
@@ -27,9 +27,9 @@ func TestFetchFeed(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			feed, err := fetchFeed(ctx, tt.url)
+			feed, err := Fetch(ctx, tt.url)
 			if err != nil {
-				t.Fatalf("fetchFeed(%q) returned error: %v", tt.url, err)
+				t.Fatalf("Fetch(%q) returned error: %v", tt.url, err)
 			}
 
 			if feed.Channel.Title == "" {
