@@ -20,6 +20,7 @@ func isUniqueViolation(err error) bool {
 func New(db *database.Queries) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/register", handleRegister(db))
+	mux.HandleFunc("POST /v1/login", handleLogin(db))
 	return mux
 }
 

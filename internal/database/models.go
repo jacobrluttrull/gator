@@ -11,6 +11,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type ApiKey struct {
+	ID        uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	KeyHash   string
+	UserID    uuid.UUID
+}
+
 type Feed struct {
 	ID            uuid.UUID
 	CreatedAt     time.Time

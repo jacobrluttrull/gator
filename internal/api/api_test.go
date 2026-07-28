@@ -16,10 +16,11 @@ import (
 )
 
 // testHandler opens the test database (skipping if GATOR_TEST_DB_URL is
-// unset), wipes it to a clean slate, and returns the /v1 API handler.
-// GATOR_TEST_DB_URL must point at a dedicated, migrated test database —
-// every table reachable from users is truncated.
-func testHandler(t *testing.T) http.Handler {
+// unset), wipes it to a clean slate, and returns the /v1 API handler
+// plus the underlying DB for test seeding. GATOR_TEST_DB_URL must point
+// at a dedicated, migrated test database — every table reachable from
+// users is truncated.
+func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 	dbURL := os.Getenv("GATOR_TEST_DB_URL")
 	if dbURL == "" {
@@ -33,7 +34,7 @@ func testHandler(t *testing.T) http.Handler {
 	if _, err := db.Exec("TRUNCATE users CASCADE"); err != nil {
 		t.Fatalf("truncating test database: %v", err)
 	}
-	return api.New(database.New(db))
+	return api.New(database.New(db)), db
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
@@ -46,7 +47,7 @@ func doJSON(t *testing.T, h http.Handler, method, path, body string) *httptest.R
 }
 
 func TestRegisterCreatesUser(t *testing.T) {
-	h := testHandler(t)
+	h, _ := testHandler(t)
 
 	rr := doJSON(t, h, "POST", "/v1/register", `{"name": "alice", "password": "s3cret-pw"}`)
 
@@ -70,7 +71,7 @@ func TestRegisterCreatesUser(t *testing.T) {
 }
 
 func TestRegisterDuplicateNameIsClean4xx(t *testing.T) {
-	h := testHandler(t)
+	h, _ := testHandler(t)
 
 	first := doJSON(t, h, "POST", "/v1/register", `{"name": "alice", "password": "s3cret-pw"}`)
 	if first.Code != http.StatusCreated {
@@ -91,7 +92,7 @@ func TestRegisterDuplicateNameIsClean4xx(t *testing.T) {
 }
 
 func TestRegisterMissingFieldsIs400(t *testing.T) {
-	h := testHandler(t)
+	h, _ := testHandler(t)
 
 	for _, body := range []string{`{"name": "bob"}`, `{"password": "pw"}`, `not json`} {
 		rr := doJSON(t, h, "POST", "/v1/register", body)

@@ -20,8 +20,9 @@ which can then be browsed, searched, and bookmarked from the terminal.
   (browse/bookmark/unbookmark/bookmarks/search), `agg.go`, `serve.go` (runs the Service: mounts the
   `/v1` API on a stdlib HTTP server, `-port` flag)
 - `internal/api/` — `New(db)` returns the `/v1` `http.Handler` (REST API per ADR-0001/0002);
-  handlers respond with sqlc-row-mirror JSON, errors as `{"error": "<message>"}`
-- `internal/auth/` — pure helpers: bcrypt password hash/verify
+  handlers respond with sqlc-row-mirror JSON (except login, which returns the one-time
+  `{"api_key": ...}` — the row only holds the hash), errors as `{"error": "<message>"}`
+- `internal/auth/` — pure helpers: bcrypt password hash/verify, API key generate/SHA-256 hash
 - `internal/feed/` — `Fetch`: HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
 - `internal/scraper/` — `Scrape`: pulls the next feed to fetch, marks it fetched, saves new posts;
   `ParsePublishedAt` for RSS date parsing
