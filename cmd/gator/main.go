@@ -11,7 +11,6 @@ import (
 	"github.com/jacobrluttrull/gator/internal/config"
 	"github.com/jacobrluttrull/gator/internal/database"
 	"github.com/jacobrluttrull/gator/internal/handlers"
-	"github.com/jacobrluttrull/gator/internal/supervisor"
 )
 
 func main() {
@@ -47,7 +46,7 @@ func main() {
 			"unbookmark": cli.LoggedIn(handlers.Unbookmark),
 			"bookmarks":  cli.LoggedIn(handlers.Bookmarks),
 			"search":     cli.LoggedIn(handlers.Search),
-			"serve":      supervisor.Serve,
+			"serve":      handlers.Serve,
 		},
 	}
 

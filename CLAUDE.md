@@ -17,20 +17,25 @@ which can then be browsed, searched, and bookmarked from the terminal.
 - `internal/cli/` — `State`, `Command`, `Commands` (registry + `Run`), and the `LoggedIn` middleware
 - `internal/handlers/` — command implementations, one file per domain: `auth.go` (login/register),
   `users.go` (reset/users), `feeds.go` (addFeed/feeds/follow/unfollow/following), `posts.go`
-  (browse/bookmark/unbookmark/bookmarks/search), `agg.go`
+  (browse/bookmark/unbookmark/bookmarks/search), `agg.go`, `serve.go` (runs the Service: mounts the
+  `/v1` API on a stdlib HTTP server, `-port` flag)
+- `internal/api/` — `New(db)` returns the `/v1` `http.Handler` (REST API per ADR-0001/0002);
+  handlers respond with sqlc-row-mirror JSON, errors as `{"error": "<message>"}`
+- `internal/auth/` — pure helpers: bcrypt password hash/verify
 - `internal/feed/` — `Fetch`: HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
 - `internal/scraper/` — `Scrape`: pulls the next feed to fetch, marks it fetched, saves new posts;
   `ParsePublishedAt` for RSS date parsing
-- `internal/supervisor/` — `Serve`: runs `agg` as a supervised child process with crash-restart + backoff
+- `internal/supervisor/` — legacy child-process supervisor; no longer wired to any command
+  (`serve` is now the HTTP Service) and slated for deletion per ADR-0002
 - `internal/config/` — reads/writes `~/.gatorconfig.json` (`db_url`, `current_user_name`)
 - `internal/database/` — sqlc-generated code. **Never hand-edit files here** — edit the `.sql` in `sql/queries/` and run `sqlc generate`
 - `sql/schema/` — goose migrations, one file per schema change, timestamp-prefixed
 - `sql/queries/` — one query per file, named to match the query (e.g. `getfeedbyurl.sql` → `GetFeedByUrl`)
 
-Package dependency direction: `cli` has no dependency on the others; `feed` is standalone;
-`scraper` depends on `cli` + `feed` + `database`; `handlers` depends on `cli` + `scraper` +
-`database`; `supervisor` depends on `cli` only (it shells out to the `gator` binary itself for
-`agg`, it doesn't call handlers directly). `cmd/gator` wires all of them together.
+Package dependency direction: `cli` has no dependency on the others; `feed` and `auth` are
+standalone; `api` depends on `auth` + `database`; `scraper` depends on `cli` + `feed` +
+`database`; `handlers` depends on `cli` + `scraper` + `api` + `database`. `cmd/gator` wires
+all of them together.
 
 ## Command pattern
 
@@ -83,6 +88,16 @@ Single-context layout (`CONTEXT.md` + `docs/adr/` at the repo root). See `docs/a
 goose -dir sql/schema postgres "$DB_URL" up      # apply pending migrations
 sqlc generate                                     # regenerate internal/database/ after editing sql/queries/
 go build ./...                                    # confirm it compiles after either
+```
+
+## Running tests
+
+API integration tests need `GATOR_TEST_DB_URL` set to a **dedicated test database** with
+migrations applied (they skip when unset). The harness `TRUNCATE`s tables between tests —
+never point it at a database whose data you care about.
+
+```
+GATOR_TEST_DB_URL="postgres://postgres:postgres@localhost:5432/gator_test?sslmode=disable" go test ./...
 ```
 
 ## Gotchas hit before
