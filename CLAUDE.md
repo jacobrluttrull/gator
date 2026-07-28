@@ -63,6 +63,20 @@ call `GetUser` themselves. Register new commands in the `cmds.Handlers` map lite
   so it isn't actually used by the current query — acceptable at this data size, would need a
   functional index rebuild if that ever matters.
 
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues (jacobrluttrull/gator), via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`CONTEXT.md` + `docs/adr/` at the repo root). See `docs/agents/domain.md`.
+
 ## Running migrations / regenerating code
 
 ```
