@@ -18,7 +18,8 @@ which can then be browsed, searched, and bookmarked from the terminal.
 - `internal/handlers/` — command implementations, one file per domain: `auth.go` (login/register),
   `users.go` (reset/users), `feeds.go` (addFeed/feeds/follow/unfollow/following), `posts.go`
   (browse/bookmark/unbookmark/bookmarks/search), `agg.go`, `serve.go` (runs the Service: mounts the
-  `/v1` API on a stdlib HTTP server, `-port` flag)
+  `/v1` API on a stdlib HTTP server plus the Aggregation loop as an in-process goroutine per
+  ADR-0002, `-port` and `-interval` flags)
 - `internal/api/` — `New(db)` returns the `/v1` `http.Handler` (REST API per ADR-0001/0002);
   handlers respond with sqlc-row-mirror JSON (except login, which returns the one-time
   `{"api_key": ...}` — the row only holds the hash), errors as `{"error": "<message>"}`.
@@ -28,9 +29,8 @@ which can then be browsed, searched, and bookmarked from the terminal.
 - `internal/auth/` — pure helpers: bcrypt password hash/verify, API key generate/SHA-256 hash
 - `internal/feed/` — `Fetch`: HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
 - `internal/scraper/` — `Scrape`: pulls the next feed to fetch, marks it fetched, saves new posts;
-  `ParsePublishedAt` for RSS date parsing
-- `internal/supervisor/` — legacy child-process supervisor; no longer wired to any command
-  (`serve` is now the HTTP Service) and slated for deletion per ADR-0002
+  `Run`: the Aggregation loop (scrape immediately, then every interval, log-and-skip failures,
+  stop on context cancel) shared by `agg` and `serve`; `ParsePublishedAt` for RSS date parsing
 - `internal/config/` — reads/writes `~/.gatorconfig.json` (`db_url`, `current_user_name`)
 - `internal/database/` — sqlc-generated code. **Never hand-edit files here** — edit the `.sql` in `sql/queries/` and run `sqlc generate`
 - `sql/schema/` — goose migrations, one file per schema change, timestamp-prefixed
@@ -112,11 +112,12 @@ GATOR_TEST_DB_URL="postgres://postgres:postgres@localhost:5432/gator_test?sslmod
 - If a query wraps a param in a SQL function (e.g. `lower($2)`), sqlc names the generated
   struct field after the function (`Lower`), not the semantic meaning (`Similarity`) — check
   the generated `.sql.go` file rather than assuming the field name.
-- `agg` runs forever via `time.Ticker` in a `for ; ; <-ticker.C` loop — stop it with `Ctrl+C`.
-  `serve` supervises it as a child process instead and restarts it on crash with backoff.
+- `agg` runs the Aggregation loop forever in the foreground — stop it with `Ctrl+C`. `serve`
+  runs the same loop as an in-process goroutine and stops it via context on SIGINT/SIGTERM;
+  process-level restarts belong to the deployment environment (ADR-0002), not the app.
 - New Postgres extensions/indexes (like `pg_trgm`) are schema migrations (DDL), not queries.
 - Go test files must live in the same directory as the package they test — a top-level `tests/`
-  directory can't reach unexported identifiers (like `supervisor.nextBackoff`) and doesn't work
+  directory can't reach unexported identifiers and doesn't work
   the way it might in other languages. Tests stay next to their package.
 - `go install` now builds from `./cmd/gator`, not the repo root — `go.mod`'s module path
   (`github.com/jacobrluttrull/gator`) plus the `cmd/gator` subpath is what `go install

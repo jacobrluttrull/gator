@@ -61,7 +61,7 @@ gator agg 1m
 - `bookmark <post_url>` / `unbookmark <post_url>` — bookmark or remove a bookmark on a post
 - `bookmarks` — list your bookmarked posts
 - `search <term> [limit]` — fuzzy-search the titles of posts from feeds you follow (defaults to 5 results)
-- `serve <time_between_reqs>` — runs `agg` as a supervised background process, automatically restarting it (with backoff) if it crashes; `Ctrl+C` stops it cleanly
+- `serve [-port 8080] [-interval 1m]` — runs the Service: the `/v1` HTTP API plus the aggregation loop as an in-process goroutine; `Ctrl+C` (or SIGTERM) stops both cleanly
 
 ## Project layout
 
@@ -70,8 +70,7 @@ cmd/gator/              entrypoint: config, DB setup, command registration, disp
 internal/cli/           State, Command, Commands (registry + dispatch), the LoggedIn middleware
 internal/handlers/      one file per command domain (auth, users, feeds, posts, agg)
 internal/feed/          RSS fetching + XML parsing
-internal/scraper/       pulls the next feed to fetch and saves new posts
-internal/supervisor/    the `serve` process supervisor
+internal/scraper/       pulls the next feed to fetch and saves new posts; the aggregation loop
 internal/config/        reads/writes ~/.gatorconfig.json
 internal/database/      sqlc-generated query code — do not hand-edit, edit sql/queries/ instead
 sql/schema/             goose migrations

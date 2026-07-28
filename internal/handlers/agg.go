@@ -1,15 +1,17 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/jacobrluttrull/gator/internal/cli"
 	"github.com/jacobrluttrull/gator/internal/scraper"
 )
 
+// Agg runs the Aggregation loop as a manual foreground debug loop; the
+// deployed form is the in-process goroutine inside serve.
 func Agg(s *cli.State, cmd cli.Command) error {
 	if len(cmd.Args) != 1 {
 		return errors.New("the agg handler expects a single argument: time_between_reqs")
@@ -20,10 +22,8 @@ func Agg(s *cli.State, cmd cli.Command) error {
 	}
 	fmt.Printf("Collecting feeds every %s\n", timeBetweenRequests)
 
-	ticker := time.NewTicker(timeBetweenRequests)
-	for ; ; <-ticker.C {
-		if err := scraper.Scrape(s); err != nil {
-			log.Printf("scrape failed: %v", err)
-		}
-	}
+	scraper.Run(context.Background(), timeBetweenRequests, func() error {
+		return scraper.Scrape(s)
+	})
+	return nil
 }
