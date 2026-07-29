@@ -15,7 +15,7 @@ which can then be browsed, searched, and bookmarked from the terminal.
 
 - `cmd/gator/main.go` — entrypoint: loads config, opens DB, builds the command map, dispatches
 - `internal/cli/` — `State`, `Command`, `Commands` (registry + `Run`), and the `LoggedIn` middleware
-- `internal/handlers/` — command implementations, one file per domain: `auth.go` (login/register),
+- `internal/handlers/` — command implementations, one file per domain: `auth.go` (login/register/setpassword),
   `users.go` (reset/users), `feeds.go` (addFeed/feeds/follow/unfollow/following), `posts.go`
   (browse/bookmark/unbookmark/bookmarks/search), `agg.go`, `serve.go` (runs the Service: mounts the
   `/v1` API on a stdlib HTTP server plus the Aggregation loop as an in-process goroutine per
@@ -32,6 +32,8 @@ which can then be browsed, searched, and bookmarked from the terminal.
   `Run`: the Aggregation loop (scrape immediately, then every interval, log-and-skip failures,
   stop on context cancel) shared by `agg` and `serve`; `ParsePublishedAt` for RSS date parsing
 - `internal/config/` — reads/writes `~/.gatorconfig.json` (`db_url`, `current_user_name`)
+- `internal/testsupport/` — test-only harness: `OpenTestDB` (open + advisory-lock + truncate
+  the `GATOR_TEST_DB_URL` database), shared by the `api` and `handlers` integration tests
 - `internal/database/` — sqlc-generated code. **Never hand-edit files here** — edit the `.sql` in `sql/queries/` and run `sqlc generate`
 - `sql/schema/` — goose migrations, one file per schema change, timestamp-prefixed
 - `sql/queries/` — one query per file, named to match the query (e.g. `getfeedbyurl.sql` → `GetFeedByUrl`)
@@ -96,9 +98,11 @@ go build ./...                                    # confirm it compiles after ei
 
 ## Running tests
 
-API integration tests need `GATOR_TEST_DB_URL` set to a **dedicated test database** with
-migrations applied (they skip when unset). The harness `TRUNCATE`s tables between tests —
-never point it at a database whose data you care about.
+Integration tests (`internal/api`, `internal/handlers`) need `GATOR_TEST_DB_URL` set to a
+**dedicated test database** with migrations applied (they skip when unset). The shared
+harness (`internal/testsupport.OpenTestDB`) `TRUNCATE`s tables between tests — never point
+it at a database whose data you care about — and serializes DB-touching tests across
+packages with a Postgres advisory lock, since `go test ./...` runs packages in parallel.
 
 ```
 GATOR_TEST_DB_URL="postgres://postgres:postgres@localhost:5432/gator_test?sslmode=disable" go test ./...

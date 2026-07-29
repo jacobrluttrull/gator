@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jacobrluttrull/gator/internal/auth"
 	"github.com/jacobrluttrull/gator/internal/cli"
 	"github.com/jacobrluttrull/gator/internal/database"
 )
@@ -29,6 +31,35 @@ func Login(s *cli.State, cmd cli.Command) error {
 		return err
 	}
 	fmt.Printf("Username set to: %s\n", name)
+	return nil
+}
+
+// SetPassword sets (or replaces) the current CLI user's password so they
+// can log in over the API. There is no old-password check: the CLI is the
+// trusted surface (ADR-0001).
+func SetPassword(s *cli.State, cmd cli.Command, user database.User) error {
+	if len(cmd.Args) == 0 {
+		return errors.New("the setpassword handler expects a single argument: the new password")
+	}
+	password := cmd.Args[0]
+	// An empty password would hash to a valid bcrypt entry that an empty
+	// API-login could then match — keep "empty credentials never log in".
+	if password == "" {
+		return errors.New("password must not be empty")
+	}
+
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return fmt.Errorf("could not hash password: %w", err)
+	}
+	if err := s.DB.SetUserPassword(context.Background(), database.SetUserPasswordParams{
+		ID:           user.ID,
+		PasswordHash: sql.NullString{String: hash, Valid: true},
+		UpdatedAt:    time.Now().UTC(),
+	}); err != nil {
+		return fmt.Errorf("could not set password: %w", err)
+	}
+	fmt.Printf("Password set for %s\n", user.Name)
 	return nil
 }
 

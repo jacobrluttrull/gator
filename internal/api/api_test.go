@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,27 +12,14 @@ import (
 
 	"github.com/jacobrluttrull/gator/internal/api"
 	"github.com/jacobrluttrull/gator/internal/database"
+	"github.com/jacobrluttrull/gator/internal/testsupport"
 )
 
-// testHandler opens the test database (skipping if GATOR_TEST_DB_URL is
-// unset), wipes it to a clean slate, and returns the /v1 API handler
-// plus the underlying DB for test seeding. GATOR_TEST_DB_URL must point
-// at a dedicated, migrated test database — every table reachable from
-// users is truncated.
+// testHandler opens the shared test database and returns the /v1 API
+// handler plus the underlying DB for test seeding.
 func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
-	dbURL := os.Getenv("GATOR_TEST_DB_URL")
-	if dbURL == "" {
-		t.Skip("GATOR_TEST_DB_URL not set; skipping API integration tests")
-	}
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		t.Fatalf("opening test database: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if _, err := db.Exec("TRUNCATE users CASCADE"); err != nil {
-		t.Fatalf("truncating test database: %v", err)
-	}
+	db := testsupport.OpenTestDB(t)
 	return api.New(database.New(db)), db
 }
 
