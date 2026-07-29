@@ -26,6 +26,7 @@ func New(db *database.Queries) http.Handler {
 	mux.HandleFunc("GET /v1/follows", loggedIn(db, handleListFollows(db)))
 	mux.HandleFunc("POST /v1/follows", loggedIn(db, handleCreateFollow(db)))
 	mux.HandleFunc("DELETE /v1/follows", loggedIn(db, handleDeleteFollow(db)))
+	mux.HandleFunc("GET /v1/posts", loggedIn(db, handleListPosts(db)))
 	return mux
 }
 
