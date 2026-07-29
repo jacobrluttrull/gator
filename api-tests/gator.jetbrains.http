@@ -1,0 +1,310 @@
+# gator API — full user flow, top to bottom
+#
+# FORMAT: JetBrains HTTP Client syntax — GoLand / IntelliJ's BUILT-IN client.
+# No plugin needed. Click the ▶▶ icon at the top of the file to run everything
+# in order, or the ▶ next to a single request.
+#
+# The only difference from gator.http (VS Code REST Client format) is how the
+# API key is captured: JetBrains uses a `> {% ... %}` response-handler script
+# instead of `{{login.response.body.$.api_key}}`. The two syntaxes are not
+# interchangeable, which is why this is a separate file.
+#
+# HOW TO USE
+#   1. Start the server:  gator serve -port 8080 -interval 1m
+#   2. Edit @name and @password below (that's it).
+#   3. Run the file top to bottom. The API key is captured into a global
+#      variable at step 2 and reused by every request after it.
+#
+# On a second run, request 1 (register) returns 409 because the user already
+# exists. That's expected — skip it, or just let it fail. Login still works.
+
+### ─────────── EDIT THESE TWO ───────────
+
+@name = alice
+@password = hunter2
+
+### ─────────── the rest rarely changes ───────────
+
+@baseUrl = http://localhost:8080
+@feedName = Hacker News
+@feedUrl = https://news.ycombinator.com/rss
+@searchTerm = go
+
+###############################################################################
+# 1. REGISTER
+#
+# Creates a user WITH a password, so they can log in over HTTP straight away.
+# (Note: the CLI's `gator register` does NOT set a password — it makes a
+# "CLI-only" user who gets a 401 at /v1/login until someone runs setpassword.)
+#
+# Expect 201. A 409 means the name is taken — fine on a re-run, move on.
+###############################################################################
+
+POST {{baseUrl}}/v1/register
+Content-Type: application/json
+
+{
+  "name": "{{name}}",
+  "password": "{{password}}"
+}
+
+###############################################################################
+# 2. LOGIN  →  captures the API key automatically
+#
+# Verifies the password and issues a fresh API key. This is the ONLY time the
+# plaintext key is ever shown — the database only stores its SHA-256 hash.
+#
+# The script below pulls api_key out of the response and saves it as a global
+# variable, so every request after this one just says {{apiKey}}.
+#
+# Expect 200. A 401 here means wrong password, unknown user, or a CLI-only user
+# with no password set — the API deliberately returns the same message for all
+# three, so it won't tell you which.
+###############################################################################
+
+POST {{baseUrl}}/v1/login
+Content-Type: application/json
+
+{
+  "name": "{{name}}",
+  "password": "{{password}}"
+}
+
+> {%
+    client.test("login succeeded", function() {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+    });
+    client.global.set("apiKey", response.body.api_key);
+%}
+
+###############################################################################
+# 3. ADD A FEED
+#
+# Adds the feed to the shared global pool AND follows it for you, in one step.
+# Feeds exist once for everybody — whoever adds it first creates it, and the
+# aggregator fetches it once no matter how many people follow it.
+#
+# Expect 201 with both objects nested: {"feed": {...}, "feed_follow": {...}}.
+# A 409 means that URL is already in the pool — skip to request 6 (follow).
+###############################################################################
+
+POST {{baseUrl}}/v1/feeds
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{feedName}}",
+  "url": "{{feedUrl}}"
+}
+
+###############################################################################
+# 4. LIST EVERY FEED IN THE POOL
+#
+# Not "my feeds" — every feed anyone has added, with who added it.
+# Use this to find a URL to follow.
+###############################################################################
+
+GET {{baseUrl}}/v1/feeds
+Authorization: ApiKey {{apiKey}}
+
+###############################################################################
+# 5. UNFOLLOW
+#
+# Identified by the feed's URL, not its id. Returns 204 with an empty body.
+#
+# Idempotent: unfollowing something you don't follow is still a 204. We do this
+# BEFORE the follow in request 6 purely so the file reruns cleanly — request 3
+# already followed you, so following again would 409.
+###############################################################################
+
+DELETE {{baseUrl}}/v1/follows
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "url": "{{feedUrl}}"
+}
+
+###############################################################################
+# 6. FOLLOW
+#
+# Subscribes you to a feed that already exists in the pool. This is what you
+# use for someone else's feed — request 3 only works for a brand new URL.
+#
+# Expect 201. 404 = no feed has that URL (exact string match — a trailing slash
+# or http-vs-https makes it a different URL). 409 = you already follow it.
+###############################################################################
+
+POST {{baseUrl}}/v1/follows
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "url": "{{feedUrl}}"
+}
+
+###############################################################################
+# 7. LIST MY FOLLOWS
+#
+# Just the feeds you personally follow, with the feed and user names resolved.
+###############################################################################
+
+GET {{baseUrl}}/v1/follows
+Authorization: ApiKey {{apiKey}}
+
+###############################################################################
+# 8. BROWSE POSTS  →  captures the first post's URL
+#
+# Posts from feeds you follow, newest published_at first.
+#
+# IMPORTANT: limit defaults to 2 if you leave it off. Also, this returns []
+# until the aggregator has actually fetched something — it fetches ONE feed per
+# interval, so with several feeds and -interval 1m you may wait a few minutes.
+#
+# The script grabs the first post's URL for the bookmark requests. If the list
+# came back empty it prints a warning instead — set @postUrl by hand and rerun
+# from request 9.
+###############################################################################
+
+GET {{baseUrl}}/v1/posts?limit=10
+Authorization: ApiKey {{apiKey}}
+
+> {%
+    if (response.body.length > 0) {
+        client.global.set("postUrl", response.body[0].url);
+    } else {
+        client.log("No posts yet — has the aggregator run? Set postUrl by hand.");
+    }
+%}
+
+###############################################################################
+# 9. BOOKMARK A POST
+#
+# Identified by the POST's url (not the feed's). Bookmarks are private per user.
+#
+# Expect 201. 404 = no post with that url. 409 = already bookmarked.
+###############################################################################
+
+POST {{baseUrl}}/v1/bookmarks
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "url": "{{postUrl}}"
+}
+
+###############################################################################
+# 10. LIST MY BOOKMARKS
+#
+# Returns the posts themselves, newest bookmark first — not join rows.
+###############################################################################
+
+GET {{baseUrl}}/v1/bookmarks
+Authorization: ApiKey {{apiKey}}
+
+###############################################################################
+# 11. UNBOOKMARK
+#
+# Same shape as request 9. Returns 204.
+###############################################################################
+
+DELETE {{baseUrl}}/v1/bookmarks
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "url": "{{postUrl}}"
+}
+
+###############################################################################
+# 12. SEARCH
+#
+# Fuzzy (trigram) match on post titles, across feeds you follow only. Each hit
+# comes back as a post plus a "sim" score, best match first. limit defaults to 5.
+#
+# A blank or whitespace-only q is a 400, not an empty result.
+#
+# Getting [] back is usually NOT a bug: similarity() compares the whole title
+# against the whole term with a 0.3 threshold, so a single short word out of a
+# long title scores too low to match even when it's literally in there. Search
+# with more of the title. GUIDE.md has the measured numbers.
+###############################################################################
+
+GET {{baseUrl}}/v1/search?q={{searchTerm}}&limit=10
+Authorization: ApiKey {{apiKey}}
+
+###############################################################################
+# 13. REVOKE ALL API KEYS   ⚠ RUN THIS LAST
+#
+# Kills every key you hold, including the one making this request. That's the
+# whole point — if you think a key leaked but don't know which, kill them all.
+# Keys never expire, so revoking is the ONLY way one ever stops working.
+#
+# Returns 204. Everything above will 401 until you re-run request 2.
+###############################################################################
+
+DELETE {{baseUrl}}/v1/keys
+Authorization: ApiKey {{apiKey}}
+
+###############################################################################
+# 14. PROVE THE REVOKE WORKED
+#
+# Same request as step 8, same key. Should now be 401. If it still returns
+# posts, you're pointed at a different server or a stale key variable.
+###############################################################################
+
+GET {{baseUrl}}/v1/posts
+Authorization: ApiKey {{apiKey}}
+
+> {%
+    client.test("key is dead", function() {
+        client.assert(response.status === 401, "expected 401, got " + response.status);
+    });
+%}
+
+
+###############################################################################
+###############################################################################
+##  OPTIONAL — error-shape sanity checks.
+##
+##  ⚠ Re-run request 2 (login) first. Step 13 revoked your key, and auth is
+##    checked BEFORE anything else, so otherwise these all just return 401
+##    instead of the 404/405/400 they're meant to show.
+###############################################################################
+###############################################################################
+
+###############################################################################
+# No Authorization header at all → 401 {"error":"missing or invalid API key"}
+###############################################################################
+
+GET {{baseUrl}}/v1/posts
+
+###############################################################################
+# Wrong auth scheme → the SAME 401. It must be exactly "ApiKey <key>":
+# not Bearer, not lowercase "apikey". This is the #1 cause of mystery 401s.
+###############################################################################
+
+GET {{baseUrl}}/v1/posts
+Authorization: Bearer {{apiKey}}
+
+###############################################################################
+# Unknown path → 404 as JSON, not the stdlib's plain-text page
+###############################################################################
+
+GET {{baseUrl}}/v1/nope
+Authorization: ApiKey {{apiKey}}
+
+###############################################################################
+# Real path, wrong verb → 405 as JSON, with an Allow header listing the
+# methods that path actually accepts. Check the response headers.
+###############################################################################
+
+PUT {{baseUrl}}/v1/posts
+Authorization: ApiKey {{apiKey}}
+
+###############################################################################
+# Bad limit (zero, negative, or past int32) → 400 {"error":"invalid limit"}
+###############################################################################
+
+GET {{baseUrl}}/v1/posts?limit=0
+Authorization: ApiKey {{apiKey}}
