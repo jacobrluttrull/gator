@@ -22,6 +22,7 @@ func New(db *database.Queries) http.Handler {
 	mux.HandleFunc("POST /v1/register", handleRegister(db))
 	mux.HandleFunc("POST /v1/login", handleLogin(db))
 	mux.HandleFunc("GET /v1/follows", loggedIn(db, handleListFollows(db)))
+	mux.HandleFunc("GET /v1/posts", loggedIn(db, handleListPosts(db)))
 	return mux
 }
 
