@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jacobrluttrull/gator/internal/api"
+	"github.com/jacobrluttrull/gator/internal/auth"
 	"github.com/jacobrluttrull/gator/internal/cli"
 	"github.com/jacobrluttrull/gator/internal/config"
 	"github.com/jacobrluttrull/gator/internal/database"
@@ -130,5 +132,43 @@ func TestSetPasswordRejectsEmptyPassword(t *testing.T) {
 	err := SetPassword(&cli.State{}, cli.Command{Name: "setpassword", Args: []string{""}}, database.User{})
 	if err == nil {
 		t.Fatal("SetPassword with an empty password returned nil; want an error")
+	}
+}
+
+// TestSetPasswordRejectsOverlongPassword covers the CLI half of bcrypt's
+// 72-byte limit: the command must refuse it and leave the stored hash
+// alone rather than reporting an internal hashing failure.
+func TestSetPasswordRejectsOverlongPassword(t *testing.T) {
+	queries := database.New(testsupport.OpenTestDB(t))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	user, err := queries.CreateUser(ctx, database.CreateUserParams{
+		ID: uuid.New(), CreatedAt: now, UpdatedAt: now, Name: "cliuser",
+	})
+	if err != nil {
+		t.Fatalf("seeding user: %v", err)
+	}
+	s := &cli.State{Config: &config.Config{CurrentUserName: "cliuser"}, DB: queries}
+
+	if err := SetPassword(s, cli.Command{Name: "setpassword", Args: []string{"workingpw"}}, user); err != nil {
+		t.Fatalf("setpassword with a normal password: %v", err)
+	}
+
+	err = SetPassword(s, cli.Command{Name: "setpassword", Args: []string{strings.Repeat("a", 73)}}, user)
+	if !errors.Is(err, auth.ErrPasswordTooLong) {
+		t.Fatalf("setpassword with a 73-byte password = %v, want ErrPasswordTooLong", err)
+	}
+
+	// The rejected attempt must not have disturbed the working password.
+	after, err := queries.GetUser(ctx, "cliuser")
+	if err != nil {
+		t.Fatalf("re-reading user: %v", err)
+	}
+	if !after.PasswordHash.Valid {
+		t.Fatal("password hash was cleared by the rejected setpassword")
+	}
+	if err := auth.CheckPasswordHash("workingpw", after.PasswordHash.String); err != nil {
+		t.Errorf("original password no longer verifies after a rejected setpassword: %v", err)
 	}
 }

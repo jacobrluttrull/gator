@@ -27,6 +27,13 @@ func Serve(s *cli.State, cmd cli.Command) error {
 	if err := fs.Parse(cmd.Args); err != nil {
 		return err
 	}
+	// The deleted supervisor.Serve took a positional interval ("serve 1m").
+	// Flag parsing stops at the first non-flag argument, so an old-style
+	// invocation would otherwise run at the default interval — and quietly
+	// drop every flag after it, including -port.
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q: serve takes flags only — use -interval (e.g. `serve -interval 1m -port 8080`)", fs.Arg(0))
+	}
 	// scraper.Run rejects this too, but from inside the goroutine — check
 	// here so a bad flag fails the command before anything starts.
 	if *interval <= 0 {

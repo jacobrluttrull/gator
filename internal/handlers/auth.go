@@ -50,6 +50,11 @@ func SetPassword(s *cli.State, cmd cli.Command, user database.User) error {
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
+		// A too-long password is the user's to fix, not a failure of the
+		// command: report it as-is rather than wrapped in "could not".
+		if errors.Is(err, auth.ErrPasswordTooLong) {
+			return err
+		}
 		return fmt.Errorf("could not hash password: %w", err)
 	}
 	if err := s.DB.SetUserPassword(context.Background(), database.SetUserPasswordParams{

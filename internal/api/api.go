@@ -5,7 +5,9 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/lib/pq"
 
@@ -18,21 +20,58 @@ func isUniqueViolation(err error) bool {
 }
 
 // New returns the /v1 API handler backed by the given DB layer.
+//
+// The routes are a table rather than a run of mux.HandleFunc calls
+// because handleUnmatched needs the same method/path pairs to answer 405
+// — one list keeps the Allow header from drifting from what's mounted.
 func New(db *database.Queries) http.Handler {
+	routes := []struct {
+		method, path string
+		handler      http.HandlerFunc
+	}{
+		{"POST", "/v1/register", handleRegister(db)},
+		{"POST", "/v1/login", handleLogin(db)},
+		{"POST", "/v1/feeds", loggedIn(db, handleAddFeed(db))},
+		{"GET", "/v1/feeds", loggedIn(db, handleListFeeds(db))},
+		{"GET", "/v1/follows", loggedIn(db, handleListFollows(db))},
+		{"POST", "/v1/follows", loggedIn(db, handleCreateFollow(db))},
+		{"DELETE", "/v1/follows", loggedIn(db, handleDeleteFollow(db))},
+		{"GET", "/v1/posts", loggedIn(db, handleListPosts(db))},
+		{"GET", "/v1/bookmarks", loggedIn(db, handleListBookmarks(db))},
+		{"POST", "/v1/bookmarks", loggedIn(db, handleCreateBookmark(db))},
+		{"DELETE", "/v1/bookmarks", loggedIn(db, handleDeleteBookmark(db))},
+		{"GET", "/v1/search", loggedIn(db, handleSearch(db))},
+	}
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/register", handleRegister(db))
-	mux.HandleFunc("POST /v1/login", handleLogin(db))
-	mux.HandleFunc("POST /v1/feeds", loggedIn(db, handleAddFeed(db)))
-	mux.HandleFunc("GET /v1/feeds", loggedIn(db, handleListFeeds(db)))
-	mux.HandleFunc("GET /v1/follows", loggedIn(db, handleListFollows(db)))
-	mux.HandleFunc("POST /v1/follows", loggedIn(db, handleCreateFollow(db)))
-	mux.HandleFunc("DELETE /v1/follows", loggedIn(db, handleDeleteFollow(db)))
-	mux.HandleFunc("GET /v1/posts", loggedIn(db, handleListPosts(db)))
-	mux.HandleFunc("GET /v1/bookmarks", loggedIn(db, handleListBookmarks(db)))
-	mux.HandleFunc("POST /v1/bookmarks", loggedIn(db, handleCreateBookmark(db)))
-	mux.HandleFunc("DELETE /v1/bookmarks", loggedIn(db, handleDeleteBookmark(db)))
-	mux.HandleFunc("GET /v1/search", loggedIn(db, handleSearch(db)))
+	allowed := make(map[string][]string)
+	for _, route := range routes {
+		mux.HandleFunc(route.method+" "+route.path, route.handler)
+		allowed[route.path] = append(allowed[route.path], route.method)
+	}
+	// Without this the stdlib answers unmatched requests in plain text,
+	// breaking the JSON error contract for anything as ordinary as a
+	// typo'd path or the wrong verb. Registering "/" also takes over the
+	// mux's own 405 handling, so handleUnmatched reproduces it.
+	mux.HandleFunc("/", handleUnmatched(allowed))
 	return mux
+}
+
+// handleUnmatched answers requests no route claimed, in the API's error
+// shape: 405 with an Allow header when the path exists under other
+// methods, 404 otherwise.
+func handleUnmatched(allowed map[string][]string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		methods, ok := allowed[r.URL.Path]
+		if !ok {
+			respondError(w, http.StatusNotFound, "not found")
+			return
+		}
+		methods = slices.Clone(methods)
+		slices.Sort(methods)
+		w.Header().Set("Allow", strings.Join(methods, ", "))
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }
 
 // urlFromBody decodes a `{"url": ...}` request body, writing a 400 error

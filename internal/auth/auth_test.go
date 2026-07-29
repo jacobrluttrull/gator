@@ -1,6 +1,10 @@
 package auth
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+)
 
 func TestPasswordHashing(t *testing.T) {
 	tests := []struct {
@@ -57,5 +61,28 @@ func TestPasswordHashing(t *testing.T) {
 func TestCheckPasswordHashRejectsGarbageHash(t *testing.T) {
 	if err := CheckPasswordHash("anything", "not-a-bcrypt-hash"); err == nil {
 		t.Error("CheckPasswordHash against a non-bcrypt string matched, want error")
+	}
+}
+
+// TestHashPasswordRejectsOverlongPassword pins bcrypt's 72-byte input
+// limit as a named error rather than the raw library failure: callers map
+// it to a 4xx, so it must stay distinguishable from a real hashing fault.
+func TestHashPasswordRejectsOverlongPassword(t *testing.T) {
+	if _, err := HashPassword(strings.Repeat("a", MaxPasswordBytes)); err != nil {
+		t.Errorf("HashPassword at the %d-byte limit = %v, want success", MaxPasswordBytes, err)
+	}
+	for _, n := range []int{MaxPasswordBytes + 1, 100} {
+		_, err := HashPassword(strings.Repeat("a", n))
+		if !errors.Is(err, ErrPasswordTooLong) {
+			t.Errorf("HashPassword(%d bytes) = %v, want ErrPasswordTooLong", n, err)
+		}
+	}
+	// Multi-byte characters count as bytes, not runes: 24 three-byte runes
+	// are exactly at the limit, 25 are over it.
+	if _, err := HashPassword(strings.Repeat("☃", 24)); err != nil {
+		t.Errorf("HashPassword(24 three-byte runes) = %v, want success", err)
+	}
+	if _, err := HashPassword(strings.Repeat("☃", 25)); !errors.Is(err, ErrPasswordTooLong) {
+		t.Errorf("HashPassword(25 three-byte runes) = %v, want ErrPasswordTooLong", err)
 	}
 }

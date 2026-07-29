@@ -52,6 +52,55 @@ func getJSONArray(t *testing.T, h http.Handler, key, path string) []map[string]a
 	return got
 }
 
+// TestUnmatchedRoutesUseTheErrorShape pins the JSON error contract for
+// requests no route claims: before this, a typo'd path or the wrong verb
+// fell through to the stdlib's plain-text "404 page not found" /
+// "Method Not Allowed", which a client decoding {"error": ...} can't read.
+func TestUnmatchedRoutesUseTheErrorShape(t *testing.T) {
+	h, _ := testHandler(t)
+
+	for _, tt := range []struct {
+		name, method, path string
+		wantStatus         int
+		wantAllow          string
+	}{
+		{"unknown path", "GET", "/v1/nonsense", http.StatusNotFound, ""},
+		{"unversioned path", "GET", "/", http.StatusNotFound, ""},
+		{"wrong verb on a public route", "GET", "/v1/register", http.StatusMethodNotAllowed, "POST"},
+		{"wrong verb on an authed route", "PATCH", "/v1/posts", http.StatusMethodNotAllowed, "GET"},
+		{"wrong verb, multi-method route", "PUT", "/v1/bookmarks", http.StatusMethodNotAllowed, "DELETE, GET, POST"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := doAuthed(t, h, tt.method, tt.path, "")
+			if rr.Code != tt.wantStatus {
+				t.Fatalf("%s %s status = %d, want %d; body: %s", tt.method, tt.path, rr.Code, tt.wantStatus, rr.Body.String())
+			}
+			if ct := rr.Header().Get("Content-Type"); ct != "application/json" {
+				t.Errorf("Content-Type = %q, want application/json", ct)
+			}
+			var got map[string]string
+			if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || got["error"] == "" {
+				t.Errorf("want error-shape JSON, got: %s", rr.Body.String())
+			}
+			if allow := rr.Header().Get("Allow"); allow != tt.wantAllow {
+				t.Errorf("Allow = %q, want %q", allow, tt.wantAllow)
+			}
+		})
+	}
+}
+
+// A 405 must not double as an auth oracle: an unauthenticated caller
+// using the wrong verb learns the route exists either way, but the
+// authenticated routes must still never run without a key.
+func TestUnmatchedMethodDoesNotBypassAuth(t *testing.T) {
+	h, _ := testHandler(t)
+
+	rr := doAuthed(t, h, "GET", "/v1/bookmarks", "")
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("GET /v1/bookmarks without a key = %d, want %d; body: %s", rr.Code, http.StatusUnauthorized, rr.Body.String())
+	}
+}
+
 func TestRegisterCreatesUser(t *testing.T) {
 	h, _ := testHandler(t)
 
@@ -73,6 +122,33 @@ func TestRegisterCreatesUser(t *testing.T) {
 	lower := strings.ToLower(rr.Body.String())
 	if strings.Contains(lower, "password") || strings.Contains(lower, "s3cret-pw") {
 		t.Errorf("response leaks password material: %s", rr.Body.String())
+	}
+}
+
+// TestRegisterOverlongPasswordIs400 covers bcrypt's 72-byte input limit,
+// which password-manager output routinely exceeds: it's bad input, so it
+// must not surface as "couldn't hash password" with a 500.
+func TestRegisterOverlongPasswordIs400(t *testing.T) {
+	h, _ := testHandler(t)
+
+	rr := doJSON(t, h, "POST", "/v1/register",
+		`{"name": "alice", "password": "`+strings.Repeat("a", 73)+`"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("register with a 73-byte password: status = %d, want %d; body: %s",
+			rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || got["error"] == "" {
+		t.Errorf("want error-shape JSON, got: %s", rr.Body.String())
+	}
+
+	// The boundary itself still registers, and the rejected attempt left
+	// no half-created user behind to collide with it.
+	rr = doJSON(t, h, "POST", "/v1/register",
+		`{"name": "alice", "password": "`+strings.Repeat("a", 72)+`"}`)
+	if rr.Code != http.StatusCreated {
+		t.Errorf("register with a 72-byte password: status = %d, want %d; body: %s",
+			rr.Code, http.StatusCreated, rr.Body.String())
 	}
 }
 

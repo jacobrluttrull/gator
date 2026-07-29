@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,32 @@ func TestServeRejectsBadInterval(t *testing.T) {
 	err := Serve(&cli.State{}, cli.Command{Name: "serve", Args: []string{"-interval", "nonsense"}})
 	if err == nil {
 		t.Fatal("Serve accepted -interval nonsense; want a flag parse error")
+	}
+}
+
+// TestServeRejectsPositionalArgs covers the old `gator serve 1m` form the
+// deleted supervisor.Serve accepted. Flag parsing stops at the first
+// non-flag argument, so these used to run at the default interval with
+// any following flags silently dropped — the failure has to be loud.
+func TestServeRejectsPositionalArgs(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{"bare old-style interval", []string{"30s"}},
+		{"old-style interval before flags", []string{"30s", "-port", "9090"}},
+		{"stray trailing argument", []string{"-port", "9090", "extra"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Serve(&cli.State{}, cli.Command{Name: "serve", Args: tt.args})
+			if err == nil {
+				t.Fatalf("Serve(%q) = nil; want an error rather than a silent default interval", tt.args)
+			}
+			// The message has to point at the replacement, not just complain.
+			if !strings.Contains(err.Error(), "-interval") {
+				t.Errorf("Serve(%q) error = %q, want it to name -interval", tt.args, err)
+			}
+		})
 	}
 }
 

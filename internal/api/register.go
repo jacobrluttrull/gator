@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -46,6 +47,10 @@ func handleRegister(db *database.Queries) http.HandlerFunc {
 
 		hash, err := auth.HashPassword(params.Password)
 		if err != nil {
+			if errors.Is(err, auth.ErrPasswordTooLong) {
+				respondError(w, http.StatusBadRequest, auth.ErrPasswordTooLong.Error())
+				return
+			}
 			respondError(w, http.StatusInternalServerError, "couldn't hash password")
 			return
 		}

@@ -31,7 +31,11 @@ which can then be browsed, searched, and bookmarked from the terminal.
   (`GET`/`POST`/`DELETE /v1/bookmarks`), `search.go` (`GET /v1/search?q=&limit=`).
   Endpoints that identify a row by URL take it in a `{"url": ...}` body (`urlFromBody`);
   `/v1/posts` and `/v1/search` take an optional `limit` query param (`limitParam`) —
-  both shared helpers live in `api.go` and write their own 4xx responses
+  both shared helpers live in `api.go` and write their own 4xx responses. Routes are a
+  table in `New` rather than a run of `mux.HandleFunc` calls, because the `"/"` catch-all
+  (`handleUnmatched`) reuses it to answer unmatched paths with a JSON 404 and wrong verbs
+  with a JSON 405 + `Allow` header — registering `"/"` takes over the mux's own plain-text
+  405, so the route table is what keeps `Allow` honest
 - `internal/auth/` — pure helpers: bcrypt password hash/verify, API key generate/SHA-256 hash
 - `internal/feed/` — `Fetch`: HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
 - `internal/scraper/` — `Scrape`: pulls the next feed to fetch, marks it fetched, saves new posts;
