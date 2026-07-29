@@ -74,11 +74,15 @@ count() { printf '%s' "$BODY" | grep -o '"id":"' | wc -l | tr -d ' '; }
 json() { echo "Content-Type: application/json"; }
 
 # JSON-escape a string for safe embedding inside a "..." body literal — quote
-# and backslash are the two bytes that break the surrounding JSON.
+# and backslash are the two bytes that break the surrounding JSON, plus control
+# characters (newline, carriage return, tab) that must be encoded.
 json_escape() {
     local s=$1
     s=${s//\\/\\\\}
     s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    s=${s//$'\r'/\\r}
+    s=${s//$'\t'/\\t}
     printf '%s' "$s"
 }
 
