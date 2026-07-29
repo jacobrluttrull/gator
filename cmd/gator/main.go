@@ -11,7 +11,6 @@ import (
 	"github.com/jacobrluttrull/gator/internal/config"
 	"github.com/jacobrluttrull/gator/internal/database"
 	"github.com/jacobrluttrull/gator/internal/handlers"
-	"github.com/jacobrluttrull/gator/internal/supervisor"
 )
 
 func main() {
@@ -32,22 +31,23 @@ func main() {
 
 	cmds := cli.Commands{
 		Handlers: map[string]func(*cli.State, cli.Command) error{
-			"login":      handlers.Login,
-			"register":   handlers.Register,
-			"reset":      handlers.Reset,
-			"users":      handlers.Users,
-			"agg":        handlers.Agg,
-			"addFeed":    cli.LoggedIn(handlers.AddFeed),
-			"feeds":      handlers.Feeds,
-			"follow":     cli.LoggedIn(handlers.Follow),
-			"following":  cli.LoggedIn(handlers.Following),
-			"unfollow":   cli.LoggedIn(handlers.Unfollow),
-			"browse":     cli.LoggedIn(handlers.Browse),
-			"bookmark":   cli.LoggedIn(handlers.Bookmark),
-			"unbookmark": cli.LoggedIn(handlers.Unbookmark),
-			"bookmarks":  cli.LoggedIn(handlers.Bookmarks),
-			"search":     cli.LoggedIn(handlers.Search),
-			"serve":      supervisor.Serve,
+			"login":       handlers.Login,
+			"register":    handlers.Register,
+			"reset":       handlers.Reset,
+			"users":       handlers.Users,
+			"agg":         handlers.Agg,
+			"addFeed":     cli.LoggedIn(handlers.AddFeed),
+			"feeds":       handlers.Feeds,
+			"follow":      cli.LoggedIn(handlers.Follow),
+			"following":   cli.LoggedIn(handlers.Following),
+			"unfollow":    cli.LoggedIn(handlers.Unfollow),
+			"browse":      cli.LoggedIn(handlers.Browse),
+			"bookmark":    cli.LoggedIn(handlers.Bookmark),
+			"unbookmark":  cli.LoggedIn(handlers.Unbookmark),
+			"bookmarks":   cli.LoggedIn(handlers.Bookmarks),
+			"search":      cli.LoggedIn(handlers.Search),
+			"setpassword": cli.LoggedIn(handlers.SetPassword),
+			"serve":       handlers.Serve,
 		},
 	}
 

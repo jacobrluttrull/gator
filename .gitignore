@@ -1,1 +1,5 @@
 .idea/
+
+# Holds a live DB connection string. The real one lives at ~/.gatorconfig.json;
+# config.Read() never reads a copy from the repo root.
+.gatorconfig.json

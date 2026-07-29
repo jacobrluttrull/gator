@@ -11,6 +11,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type ApiKey struct {
+	ID        uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	KeyHash   string
+	UserID    uuid.UUID
+}
+
 type Feed struct {
 	ID            uuid.UUID
 	CreatedAt     time.Time
@@ -49,8 +57,9 @@ type PostBookmark struct {
 }
 
 type User struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Name      string
+	ID           uuid.UUID
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Name         string
+	PasswordHash sql.NullString
 }
