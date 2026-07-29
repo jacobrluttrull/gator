@@ -74,7 +74,15 @@ call `GetUser` themselves. Register new commands in the `cmds.Handlers` map lite
   on the column. Multi-column constraints (composite `unique(a, b)`) go as a trailing table-level line.
 - Foreign keys use `on delete cascade` — deleting a user cascades to their feeds, follows, posts, bookmarks.
 - **New tables or schema changes always get a new goose migration file** — never edit an
-  already-created/applied migration. Use `goose -dir sql/schema create <name> sql`.
+  already-created/applied migration, even one only applied locally on an unmerged branch.
+  Use `goose -dir sql/schema create <name> sql`.
+- A constraint that existing rows can violate needs its data cleanup in a **separate migration
+  versioned _before_ the constraint** — goose applies in version order and stops at the first
+  failure, so a cleanup ordered after would never run (`20260729041443_dedup_feed_urls.sql`
+  ahead of `20260729041444_add_feed_url_unique.sql`). That means hand-naming the version
+  instead of `goose create`, and a database that already applied the later migration needs a
+  one-time `goose ... -allow-missing up` (plain `up` refuses with "found 1 missing migrations").
+  `internal/testsupport/migration_test.go` guards both the ordering and the cleanup.
 - Queries that insert a row but need to return joined data from another table (e.g.
   `CreateFeedFollow` returning the user's and feed's names) use a `WITH ... AS (INSERT ... RETURNING *)`
   CTE, then `SELECT` + `JOIN` off that CTE — sqlc can't return cross-table columns from a bare `INSERT ... RETURNING`.
