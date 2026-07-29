@@ -14,23 +14,32 @@
 -- post is repointed onto it, and the duplicates' names are dropped along
 -- with their rows.
 
--- A user who followed both duplicates would collide on feed_follows'
--- unique(user_id, feed_id) once both rows point at the canonical feed.
--- Drop the losing row: the Following it represents survives as the one
--- already on the canonical feed.
+-- A user whose follows all land on the same canonical feed would collide
+-- on feed_follows' unique(user_id, feed_id) once repointed — whether they
+-- followed the canonical row plus a duplicate, or several duplicates of
+-- each other with no follow on the canonical at all. Checking only
+-- against the canonical row misses the second shape, so rank every
+-- follow by the canonical feed it will end up on and keep one
+-- deterministic winner per (user_id, canonical feed): a follow already
+-- on the canonical row first, then the oldest, ties broken by id.
 with canonical as (
     select id,
            first_value(id) over (partition by url order by created_at, id) as canonical_id
     from feeds
+),
+ranked as (
+    select ff.id,
+           row_number() over (
+               partition by ff.user_id, c.canonical_id
+               order by (ff.feed_id = c.canonical_id) desc, ff.created_at, ff.id
+           ) as keep_rank
+    from feed_follows ff
+    join canonical c on c.id = ff.feed_id
 )
 delete from feed_follows ff
-using canonical c
-where ff.feed_id = c.id
-  and c.id <> c.canonical_id
-  and exists (
-      select 1 from feed_follows kept
-      where kept.user_id = ff.user_id and kept.feed_id = c.canonical_id
-  );
+using ranked r
+where ff.id = r.id
+  and r.keep_rank > 1;
 
 with canonical as (
     select id,

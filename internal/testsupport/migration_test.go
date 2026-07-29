@@ -122,27 +122,51 @@ func TestFeedURLUniqueMigrationCollapsesDuplicates(t *testing.T) {
 	})
 
 	const dupURL = "https://shared.example/rss"
+	const tripleURL = "https://triple.example/rss"
 	mustExec(t, db, "seeding users", `
 		insert into users (id, created_at, updated_at, name) values
 			('11111111-1111-1111-1111-111111111111', now(), now(), 'alice'),
 			('22222222-2222-2222-2222-222222222222', now(), now(), 'bob'),
-			('33333333-3333-3333-3333-333333333333', now(), now(), 'carol')`)
-	// Two feeds on one URL. Alice's is older, so it is the canonical row.
+			('33333333-3333-3333-3333-333333333333', now(), now(), 'carol'),
+			('44444444-4444-4444-4444-444444444444', now(), now(), 'dave')`)
+	// Two feeds on one URL (alice's is older, so it is the canonical row),
+	// plus three feeds on another — the shape where follow collisions can
+	// happen among the losing duplicates themselves, not just against the
+	// canonical row.
 	mustExec(t, db, "seeding duplicate feeds", `
 		insert into feeds (id, created_at, updated_at, name, url, user_id) values
 			('aaaaaaaa-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01', 'Shared (alice)', $1, '11111111-1111-1111-1111-111111111111'),
 			('bbbbbbbb-0000-0000-0000-000000000002', '2026-02-01', '2026-02-01', 'Shared (bob)',   $1, '22222222-2222-2222-2222-222222222222'),
-			('cccccccc-0000-0000-0000-000000000003', '2026-03-01', '2026-03-01', 'Untouched', 'https://other.example/rss', '33333333-3333-3333-3333-333333333333')`,
-		dupURL)
+			('cccccccc-0000-0000-0000-000000000003', '2026-03-01', '2026-03-01', 'Untouched', 'https://other.example/rss', '33333333-3333-3333-3333-333333333333'),
+			('dddddddd-0000-0000-0000-000000000004', '2026-01-01', '2026-01-01', 'Triple (alice)', $2, '11111111-1111-1111-1111-111111111111'),
+			('eeeeeeee-0000-0000-0000-000000000005', '2026-02-01', '2026-02-01', 'Triple (bob)',   $2, '22222222-2222-2222-2222-222222222222'),
+			('ffffffff-0000-0000-0000-000000000006', '2026-03-01', '2026-03-01', 'Triple (carol)', $2, '33333333-3333-3333-3333-333333333333')`,
+		dupURL, tripleURL)
 	// Alice follows both duplicates — the case that collides on
 	// unique(user_id, feed_id) when the follows are repointed. Bob follows
 	// only the losing row; carol follows an unrelated feed.
+	//
+	// On the three-way URL: dave follows the two *losing* rows and not the
+	// canonical one — the collision a canonical-only check misses — and
+	// carol follows all three, colliding both against the canonical row
+	// and between the losers.
+	//
+	// Timestamps are deliberately distinct to exercise the migration's
+	// oldest-follow selection logic: alice's canonical-feed follow is older
+	// than her duplicate follow; dave's two follows have opposing timestamps
+	// so the oldest wins; carol's three follows are ordered newest-to-oldest
+	// to ensure the canonical-preferred logic (not just created_at) is exercised.
 	mustExec(t, db, "seeding follows", `
 		insert into feed_follows (id, created_at, updated_at, user_id, feed_id) values
-			('f0000000-0000-0000-0000-000000000001', now(), now(), '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000001'),
-			('f0000000-0000-0000-0000-000000000002', now(), now(), '11111111-1111-1111-1111-111111111111', 'bbbbbbbb-0000-0000-0000-000000000002'),
-			('f0000000-0000-0000-0000-000000000003', now(), now(), '22222222-2222-2222-2222-222222222222', 'bbbbbbbb-0000-0000-0000-000000000002'),
-			('f0000000-0000-0000-0000-000000000004', now(), now(), '33333333-3333-3333-3333-333333333333', 'cccccccc-0000-0000-0000-000000000003')`)
+			('f0000000-0000-0000-0000-000000000001', '2026-01-10 10:00:00', '2026-01-10 10:00:00', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000001'),
+			('f0000000-0000-0000-0000-000000000002', '2026-01-10 11:00:00', '2026-01-10 11:00:00', '11111111-1111-1111-1111-111111111111', 'bbbbbbbb-0000-0000-0000-000000000002'),
+			('f0000000-0000-0000-0000-000000000003', '2026-01-10 12:00:00', '2026-01-10 12:00:00', '22222222-2222-2222-2222-222222222222', 'bbbbbbbb-0000-0000-0000-000000000002'),
+			('f0000000-0000-0000-0000-000000000004', '2026-01-10 13:00:00', '2026-01-10 13:00:00', '33333333-3333-3333-3333-333333333333', 'cccccccc-0000-0000-0000-000000000003'),
+			('f0000000-0000-0000-0000-000000000005', '2026-01-10 14:00:00', '2026-01-10 14:00:00', '44444444-4444-4444-4444-444444444444', 'eeeeeeee-0000-0000-0000-000000000005'),
+			('f0000000-0000-0000-0000-000000000006', '2026-01-10 15:00:00', '2026-01-10 15:00:00', '44444444-4444-4444-4444-444444444444', 'ffffffff-0000-0000-0000-000000000006'),
+			('f0000000-0000-0000-0000-000000000007', '2026-01-10 18:00:00', '2026-01-10 18:00:00', '33333333-3333-3333-3333-333333333333', 'dddddddd-0000-0000-0000-000000000004'),
+			('f0000000-0000-0000-0000-000000000008', '2026-01-10 17:00:00', '2026-01-10 17:00:00', '33333333-3333-3333-3333-333333333333', 'eeeeeeee-0000-0000-0000-000000000005'),
+			('f0000000-0000-0000-0000-000000000009', '2026-01-10 16:00:00', '2026-01-10 16:00:00', '33333333-3333-3333-3333-333333333333', 'ffffffff-0000-0000-0000-000000000006')`)
 	mustExec(t, db, "seeding posts", `
 		insert into posts (id, created_at, updated_at, title, url, description, published_at, feed_id) values
 			('90000000-0000-0000-0000-000000000001', now(), now(), 'from alice''s copy', 'https://shared.example/1', '', now(), 'aaaaaaaa-0000-0000-0000-000000000001'),
@@ -159,7 +183,7 @@ func TestFeedURLUniqueMigrationCollapsesDuplicates(t *testing.T) {
 	}
 
 	var feedCount int
-	if err := db.QueryRow(`select count(*) from feeds where url = $1`, dupURL).Scan(&feedCount); err != nil {
+	if err := db.QueryRowContext(context.Background(), `select count(*) from feeds where url = $1`, dupURL).Scan(&feedCount); err != nil {
 		t.Fatalf("counting feeds: %v", err)
 	}
 	if feedCount != 1 {
@@ -167,32 +191,61 @@ func TestFeedURLUniqueMigrationCollapsesDuplicates(t *testing.T) {
 	}
 
 	var survivor, survivorName string
-	if err := db.QueryRow(`select id::text, name from feeds where url = $1`, dupURL).Scan(&survivor, &survivorName); err != nil {
+	if err := db.QueryRowContext(context.Background(), `select id::text, name from feeds where url = $1`, dupURL).Scan(&survivor, &survivorName); err != nil {
 		t.Fatalf("reading surviving feed: %v", err)
 	}
 	if survivor != "aaaaaaaa-0000-0000-0000-000000000001" {
 		t.Errorf("surviving feed = %s (%q), want the oldest row (alice's)", survivor, survivorName)
 	}
 
-	// Nobody loses their Following, and the collision is collapsed rather
-	// than duplicated: alice followed both copies, so she ends with one.
-	for _, tc := range []struct{ user string }{{"alice"}, {"bob"}} {
+	var tripleSurvivor string
+	if err := db.QueryRowContext(context.Background(), `select id::text from feeds where url = $1`, tripleURL).Scan(&tripleSurvivor); err != nil {
+		t.Fatalf("reading the three-way url's surviving feed: %v", err)
+	}
+	if tripleSurvivor != "dddddddd-0000-0000-0000-000000000004" {
+		t.Errorf("three-way url's surviving feed = %s, want the oldest row (alice's)", tripleSurvivor)
+	}
+
+	// Nobody loses their Following, and every collision is collapsed rather
+	// than duplicated: alice followed both copies of the shared feed, dave
+	// followed two losing copies of the triple feed, carol followed all
+	// three — each ends with exactly one, and the specific surviving follow
+	// ID confirms the migration's canonical-preference and oldest-follow logic.
+	for _, tc := range []struct {
+		user, url, expectedFollowID string
+	}{
+		// Alice had two follows: f001 (canonical feed, older) and f002 (dup feed, newer).
+		// Canonical-preference comes first in the ORDER BY, so f001 survives.
+		{"alice", dupURL, "f0000000-0000-0000-0000-000000000001"},
+		// Bob had one follow: f003 (dup feed). It gets repointed, no collision.
+		{"bob", dupURL, "f0000000-0000-0000-0000-000000000003"},
+		// Dave had two follows on losing feeds: f005 (older) and f006 (newer).
+		// No canonical-feed follow, so oldest wins: f005.
+		{"dave", tripleURL, "f0000000-0000-0000-0000-000000000005"},
+		// Carol had three follows: f007 (canonical, newest), f008 (dup, middle), f009 (dup, oldest).
+		// Canonical-preference beats created_at, so f007 survives despite being newest.
+		{"carol", tripleURL, "f0000000-0000-0000-0000-000000000007"},
+	} {
 		var follows int
-		if err := db.QueryRow(`
-			select count(*) from feed_follows ff
+		var survivorID string
+		if err := db.QueryRowContext(context.Background(), `
+			select count(*), min(ff.id::text) from feed_follows ff
 			join users u on u.id = ff.user_id
 			join feeds f on f.id = ff.feed_id
-			where u.name = $1 and f.url = $2`, tc.user, dupURL).Scan(&follows); err != nil {
+			where u.name = $1 and f.url = $2`, tc.user, tc.url).Scan(&follows, &survivorID); err != nil {
 			t.Fatalf("counting %s's follows: %v", tc.user, err)
 		}
 		if follows != 1 {
-			t.Errorf("%s's followings of the deduped feed = %d, want 1", tc.user, follows)
+			t.Errorf("%s's followings of %s = %d, want 1", tc.user, tc.url, follows)
+		}
+		if survivorID != tc.expectedFollowID {
+			t.Errorf("%s's surviving follow on %s = %s, want %s (canonical-preference or oldest)", tc.user, tc.url, survivorID, tc.expectedFollowID)
 		}
 	}
 
 	// Posts from both copies survive, repointed onto the canonical feed.
 	var repointed int
-	if err := db.QueryRow(`select count(*) from posts where feed_id = $1`, survivor).Scan(&repointed); err != nil {
+	if err := db.QueryRowContext(context.Background(), `select count(*) from posts where feed_id = $1`, survivor).Scan(&repointed); err != nil {
 		t.Fatalf("counting repointed posts: %v", err)
 	}
 	if repointed != 2 {
@@ -201,7 +254,7 @@ func TestFeedURLUniqueMigrationCollapsesDuplicates(t *testing.T) {
 
 	// The unrelated feed, its follow, and its post are untouched.
 	var untouched int
-	if err := db.QueryRow(`
+	if err := db.QueryRowContext(context.Background(), `
 		select count(*) from feeds f
 		join feed_follows ff on ff.feed_id = f.id
 		join posts p on p.feed_id = f.id
@@ -216,7 +269,7 @@ func TestFeedURLUniqueMigrationCollapsesDuplicates(t *testing.T) {
 	if !feedURLKeyExists(t, db) {
 		t.Fatal("migration finished without adding feeds_url_key")
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(context.Background(), `
 		insert into feeds (id, created_at, updated_at, name, url, user_id)
 		values (gen_random_uuid(), now(), now(), 'another', $1, '33333333-3333-3333-3333-333333333333')`,
 		dupURL); err == nil {

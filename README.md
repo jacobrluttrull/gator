@@ -23,7 +23,7 @@ This page is the short version: install, the command list, the endpoint list.
 
 ## Install
 
-```
+```bash
 go install github.com/jacobrluttrull/gator/cmd/gator@latest
 ```
 

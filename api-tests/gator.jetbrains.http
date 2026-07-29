@@ -227,7 +227,7 @@ Content-Type: application/json
 # Getting [] back is usually NOT a bug: similarity() compares the whole title
 # against the whole term with a 0.3 threshold, so a single short word out of a
 # long title scores too low to match even when it's literally in there. Search
-# with more of the title. GUIDE.md has the measured numbers.
+# with more of the title.
 ###############################################################################
 
 GET {{baseUrl}}/v1/search?q={{searchTerm}}&limit=10

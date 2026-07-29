@@ -56,7 +56,7 @@ func Serve(s *cli.State, cmd cli.Command) error {
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: api.New(s.DB),
+		Handler: api.New(s.DB, s.Conn),
 	}
 
 	serveErr := make(chan error, 1)

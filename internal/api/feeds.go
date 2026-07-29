@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -64,8 +65,11 @@ func handleListFeeds(db *database.Queries) authedHandler {
 }
 
 // handleAddFeed adds a feed to the shared pool and creates the adder's
-// follow in one step, mirroring the CLI's addFeed.
-func handleAddFeed(db *database.Queries) authedHandler {
+// follow in one step, mirroring the CLI's addFeed. The two writes run in
+// a single transaction — otherwise a failed CreateFeedFollow leaves an
+// orphaned feed behind, and a retry with the same url then fails on the
+// unique constraint instead of just creating the follow.
+func handleAddFeed(db *database.Queries, conn *sql.DB) authedHandler {
 	return func(w http.ResponseWriter, r *http.Request, user database.User) {
 		var params struct {
 			Name string `json:"name"`
@@ -80,8 +84,16 @@ func handleAddFeed(db *database.Queries) authedHandler {
 			return
 		}
 
+		tx, err := conn.BeginTx(r.Context(), nil)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "couldn't create feed")
+			return
+		}
+		defer func() { _ = tx.Rollback() }()
+		qtx := db.WithTx(tx)
+
 		now := time.Now().UTC()
-		feed, err := db.CreateFeed(r.Context(), database.CreateFeedParams{
+		feed, err := qtx.CreateFeed(r.Context(), database.CreateFeedParams{
 			ID:        uuid.New(),
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -98,7 +110,7 @@ func handleAddFeed(db *database.Queries) authedHandler {
 			return
 		}
 
-		follow, err := db.CreateFeedFollow(r.Context(), database.CreateFeedFollowParams{
+		follow, err := qtx.CreateFeedFollow(r.Context(), database.CreateFeedFollowParams{
 			ID:        uuid.New(),
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -107,6 +119,11 @@ func handleAddFeed(db *database.Queries) authedHandler {
 		})
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "couldn't follow feed")
+			return
+		}
+
+		if err := tx.Commit(); err != nil {
+			respondError(w, http.StatusInternalServerError, "couldn't create feed")
 			return
 		}
 

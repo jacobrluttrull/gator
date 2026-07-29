@@ -38,7 +38,8 @@ func apiLogin(t *testing.T, h http.Handler, name, password string) *httptest.Res
 // trusted CLI, then logs in over the API and finds their pre-existing
 // follows waiting.
 func TestSetPasswordUpgradesCLIOnlyUser(t *testing.T) {
-	queries := database.New(testsupport.OpenTestDB(t))
+	db := testsupport.OpenTestDB(t)
+	queries := database.New(db)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
@@ -62,7 +63,7 @@ func TestSetPasswordUpgradesCLIOnlyUser(t *testing.T) {
 		t.Fatalf("seeding follow: %v", err)
 	}
 
-	h := api.New(queries)
+	h := api.New(queries, db)
 	if rr := apiLogin(t, h, "cliuser", "first-pw"); rr.Code != http.StatusUnauthorized {
 		t.Fatalf("CLI-only user login status = %d, want %d; body: %s", rr.Code, http.StatusUnauthorized, rr.Body.String())
 	}
@@ -180,7 +181,7 @@ func TestSetPasswordRevokesExistingKeys(t *testing.T) {
 	db := testsupport.OpenTestDB(t)
 	queries := database.New(db)
 	ctx := context.Background()
-	h := api.New(queries)
+	h := api.New(queries, db)
 
 	// A user with a password and two live keys, as if logged in twice.
 	if rr := apiRegister(t, h, "leaky", "first-pw"); rr.Code != http.StatusCreated {
@@ -211,7 +212,7 @@ func TestSetPasswordRevokesExistingKeys(t *testing.T) {
 		t.Error("a second pre-existing key survived setpassword")
 	}
 	var remaining int
-	if err := db.QueryRow(`
+	if err := db.QueryRowContext(context.Background(), `
 		select count(*) from api_keys k join users u on u.id = k.user_id
 		where u.name = 'leaky'`).Scan(&remaining); err != nil {
 		t.Fatalf("counting keys: %v", err)
@@ -233,9 +234,10 @@ func TestSetPasswordRevokesExistingKeys(t *testing.T) {
 // TestSetPasswordRevocationIsPerUser keeps one user's password change from
 // logging everybody else out.
 func TestSetPasswordRevocationIsPerUser(t *testing.T) {
-	queries := database.New(testsupport.OpenTestDB(t))
+	db := testsupport.OpenTestDB(t)
+	queries := database.New(db)
 	ctx := context.Background()
-	h := api.New(queries)
+	h := api.New(queries, db)
 
 	for _, name := range []string{"alice", "bob"} {
 		if rr := apiRegister(t, h, name, "pw-"+name); rr.Code != http.StatusCreated {

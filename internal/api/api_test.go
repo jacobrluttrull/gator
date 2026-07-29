@@ -21,7 +21,7 @@ import (
 func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 	db := testsupport.OpenTestDB(t)
-	return api.New(database.New(db)), db
+	return api.New(database.New(db), db), db
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
