@@ -38,8 +38,9 @@ the module root.
    ```
    createdb gator
    ```
-2. Create `~/.gatorconfig.json` (in your **home directory** — a copy in the repo
-   is ignored):
+2. Create `~/.gatorconfig.json` (in your **home directory** — the config is read
+   from `$HOME` and nowhere else; a copy in the repo root is ignored by git and
+   never loaded):
    ```json
    {
      "db_url": "postgres://user:password@localhost:5432/gator?sslmode=disable"
