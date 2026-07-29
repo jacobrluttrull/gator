@@ -30,26 +30,26 @@ func ParsePublishedAt(pubDate string) time.Time {
 	return time.Time{}
 }
 
-func Scrape(s *cli.State) error {
-	nextFeed, err := s.DB.GetNextFeedToFetch(context.Background())
+func Scrape(ctx context.Context, s *cli.State) error {
+	nextFeed, err := s.DB.GetNextFeedToFetch(ctx)
 	if err != nil {
 		return err
 	}
 
-	_, err = s.DB.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
+	_, err = s.DB.MarkFeedFetched(ctx, database.MarkFeedFetchedParams{
 		ID:        nextFeed.ID,
 		UpdatedAt: time.Now().UTC(),
 	})
 	if err != nil {
 		return err
 	}
-	rssFeed, err := feed.Fetch(context.Background(), nextFeed.Url)
+	rssFeed, err := feed.Fetch(ctx, nextFeed.Url)
 	if err != nil {
 		return err
 	}
 
 	for _, item := range rssFeed.Channel.Item {
-		_, err := s.DB.CreatePost(context.Background(), database.CreatePostParams{
+		_, err := s.DB.CreatePost(ctx, database.CreatePostParams{
 			ID:          uuid.New(),
 			CreatedAt:   time.Now().UTC(),
 			UpdatedAt:   time.Now().UTC(),

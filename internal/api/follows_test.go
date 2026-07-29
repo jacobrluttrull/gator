@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -31,7 +32,7 @@ func registerAndLogin(t *testing.T, h http.Handler, name, password string) strin
 
 func doAuthed(t *testing.T, h http.Handler, method, path, authorization string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), method, path, nil)
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}
@@ -44,7 +45,7 @@ func doAuthed(t *testing.T, h http.Handler, method, path, authorization string) 
 // (e.g. a typo'd user or feed name in an INSERT ... SELECT).
 func seedExec(t *testing.T, db *sql.DB, label, query string, args ...any) {
 	t.Helper()
-	res, err := db.Exec(query, args...)
+	res, err := db.ExecContext(context.Background(), query, args...)
 	if err != nil {
 		t.Fatalf("%s: %v", label, err)
 	}

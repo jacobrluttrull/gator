@@ -15,12 +15,53 @@ func startRun(ctx context.Context, interval time.Duration, scrape func() error) 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		Run(ctx, interval, func() error {
+		Run(ctx, interval, func(context.Context) error {
 			calls.Add(1)
 			return scrape()
 		})
 	}()
 	return &calls, done
+}
+
+func TestRunRejectsNonPositiveInterval(t *testing.T) {
+	for _, interval := range []time.Duration{0, -time.Second} {
+		err := Run(context.Background(), interval, func(context.Context) error {
+			t.Fatal("scrape ran despite an invalid interval")
+			return nil
+		})
+		if err == nil {
+			t.Errorf("Run(%v) returned nil; want an error instead of a NewTicker panic", interval)
+		}
+	}
+}
+
+// TestRunScrapeSeesCancellation: the scrape callback receives Run's
+// context so an in-flight fetch can stop when the loop is told to.
+func TestRunScrapeSeesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sawCancel := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		Run(ctx, time.Hour, func(scrapeCtx context.Context) error {
+			cancel()
+			select {
+			case <-scrapeCtx.Done():
+				close(sawCancel)
+			case <-time.After(2 * time.Second):
+			}
+			return scrapeCtx.Err()
+		})
+	}()
+
+	select {
+	case <-sawCancel:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scrape callback's context never saw the loop's cancellation")
+	}
+	<-done
 }
 
 func waitFor(t *testing.T, label string, cond func() bool) {

@@ -27,6 +27,11 @@ func Serve(s *cli.State, cmd cli.Command) error {
 	if err := fs.Parse(cmd.Args); err != nil {
 		return err
 	}
+	// scraper.Run rejects this too, but from inside the goroutine — check
+	// here so a bad flag fails the command before anything starts.
+	if *interval <= 0 {
+		return fmt.Errorf("-interval must be positive, got %s", *interval)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -34,9 +39,11 @@ func Serve(s *cli.State, cmd cli.Command) error {
 	aggDone := make(chan struct{})
 	go func() {
 		defer close(aggDone)
-		scraper.Run(ctx, *interval, func() error {
-			return scraper.Scrape(s)
-		})
+		if err := scraper.Run(ctx, *interval, func(ctx context.Context) error {
+			return scraper.Scrape(ctx, s)
+		}); err != nil {
+			log.Printf("aggregation loop: %v", err)
+		}
 	}()
 	log.Printf("aggregating feeds every %s", *interval)
 

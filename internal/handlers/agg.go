@@ -22,8 +22,7 @@ func Agg(s *cli.State, cmd cli.Command) error {
 	}
 	fmt.Printf("Collecting feeds every %s\n", timeBetweenRequests)
 
-	scraper.Run(context.Background(), timeBetweenRequests, func() error {
-		return scraper.Scrape(s)
+	return scraper.Run(context.Background(), timeBetweenRequests, func(ctx context.Context) error {
+		return scraper.Scrape(ctx, s)
 	})
-	return nil
 }

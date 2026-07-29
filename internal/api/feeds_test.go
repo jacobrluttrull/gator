@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,7 @@ import (
 // Authorization header.
 func doAuthedJSON(t *testing.T, h http.Handler, method, path, key, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "ApiKey "+key)
 	rr := httptest.NewRecorder()
@@ -127,7 +128,7 @@ func TestFeedAndFollowRoutesFailClosed(t *testing.T) {
 	for _, route := range routes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			for _, authorization := range []string{"", "ApiKey not-a-real-key"} {
-				req := httptest.NewRequest(route.method, route.path,
+				req := httptest.NewRequestWithContext(context.Background(), route.method, route.path,
 					strings.NewReader(`{"name": "n", "url": "https://a.example/rss"}`))
 				req.Header.Set("Content-Type", "application/json")
 				if authorization != "" {

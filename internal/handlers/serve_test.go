@@ -1,9 +1,8 @@
 package handlers
 
 import (
-	"database/sql"
+	"context"
 	"net"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/jacobrluttrull/gator/internal/cli"
 	"github.com/jacobrluttrull/gator/internal/config"
 	"github.com/jacobrluttrull/gator/internal/database"
+	"github.com/jacobrluttrull/gator/internal/testsupport"
 )
 
 func TestServeRejectsBadInterval(t *testing.T) {
@@ -26,21 +26,18 @@ func TestServeRejectsBadInterval(t *testing.T) {
 // return the listen error rather than hang, and must not leak the
 // Aggregation goroutine while doing so.
 func TestServeListenFailureStopsCleanly(t *testing.T) {
-	dbURL := os.Getenv("GATOR_TEST_DB_URL")
-	if dbURL == "" {
-		t.Skip("GATOR_TEST_DB_URL not set; skipping serve integration test")
-	}
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		t.Fatalf("opening test database: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
+	db := testsupport.OpenTestDB(t)
 
-	ln, err := net.Listen("tcp", ":0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("occupying a port: %v", err)
 	}
-	defer ln.Close()
+	t.Cleanup(func() {
+		if err := ln.Close(); err != nil {
+			t.Errorf("closing occupied port: %v", err)
+		}
+	})
 	port := ln.Addr().(*net.TCPAddr).Port
 
 	s := &cli.State{Config: &config.Config{}, DB: database.New(db)}

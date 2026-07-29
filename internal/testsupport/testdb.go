@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -49,7 +50,12 @@ func OpenTestDB(t *testing.T) *sql.DB {
 		conn.Close()
 	})
 
-	if _, err := db.Exec("TRUNCATE users CASCADE"); err != nil {
+	// Bounded so a stale lock-holder elsewhere can't hang the whole test
+	// process; the advisory-lock wait above is deliberately unbounded
+	// (queueing behind another package's tests is normal).
+	truncateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := db.ExecContext(truncateCtx, "TRUNCATE users CASCADE"); err != nil {
 		t.Fatalf("truncating test database: %v", err)
 	}
 	return db

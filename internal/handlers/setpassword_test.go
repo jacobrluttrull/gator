@@ -24,7 +24,7 @@ func apiLogin(t *testing.T, h http.Handler, name, password string) *httptest.Res
 	if err != nil {
 		t.Fatalf("marshaling login body: %v", err)
 	}
-	req := httptest.NewRequest("POST", "/v1/login", strings.NewReader(string(body)))
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/v1/login", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -85,7 +85,7 @@ func TestSetPasswordUpgradesCLIOnlyUser(t *testing.T) {
 	}
 
 	// The pre-existing follow is visible over the authenticated API.
-	req := httptest.NewRequest("GET", "/v1/follows", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/v1/follows", nil)
 	req.Header.Set("Authorization", "ApiKey "+got.APIKey)
 	fr := httptest.NewRecorder()
 	h.ServeHTTP(fr, req)

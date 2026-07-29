@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -41,13 +42,13 @@ func TestLoginWithCorrectPasswordReturnsAPIKey(t *testing.T) {
 	// the SHA-256 hash, never the key itself. Until the auth middleware
 	// ticket lands there is no HTTP-observable way to check this.
 	var stored int
-	if err := db.QueryRow("SELECT count(*) FROM api_keys WHERE key_hash = $1", got.APIKey).Scan(&stored); err != nil {
+	if err := db.QueryRowContext(context.Background(), "SELECT count(*) FROM api_keys WHERE key_hash = $1", got.APIKey).Scan(&stored); err != nil {
 		t.Fatalf("querying api_keys for raw key: %v", err)
 	}
 	if stored != 0 {
 		t.Errorf("raw API key found in api_keys.key_hash; keys must be stored hashed")
 	}
-	if err := db.QueryRow("SELECT count(*) FROM api_keys WHERE key_hash = $1", auth.HashAPIKey(got.APIKey)).Scan(&stored); err != nil {
+	if err := db.QueryRowContext(context.Background(), "SELECT count(*) FROM api_keys WHERE key_hash = $1", auth.HashAPIKey(got.APIKey)).Scan(&stored); err != nil {
 		t.Fatalf("querying api_keys for hashed key: %v", err)
 	}
 	if stored != 1 {
@@ -90,7 +91,7 @@ func TestLoginCLIOnlyUserIsRefused(t *testing.T) {
 	h, db := testHandler(t)
 
 	// A CLI-registered user has no password hash.
-	if _, err := db.Exec(
+	if _, err := db.ExecContext(context.Background(),
 		"INSERT INTO users (id, created_at, updated_at, name) VALUES (gen_random_uuid(), now(), now(), 'cliuser')",
 	); err != nil {
 		t.Fatalf("seeding CLI-only user: %v", err)
