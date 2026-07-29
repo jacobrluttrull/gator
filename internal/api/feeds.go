@@ -89,7 +89,7 @@ func handleAddFeed(db *database.Queries, conn *sql.DB) authedHandler {
 			respondError(w, http.StatusInternalServerError, "couldn't create feed")
 			return
 		}
-		defer tx.Rollback()
+		defer func() { _ = tx.Rollback() }()
 		qtx := db.WithTx(tx)
 
 		now := time.Now().UTC()
