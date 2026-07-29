@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// seedBookmarkablePost seeds a feed the named user follows plus one post
-// in it, and returns that post's url.
-func seedBookmarkablePost(t *testing.T, db *sql.DB, userName, title, url string) string {
+// seedFollowedPost seeds a feed the named user follows plus one post in
+// it, and returns that post's url.
+func seedFollowedPost(t *testing.T, db *sql.DB, userName, title, url string) string {
 	t.Helper()
 	feedName := userName + "'s Feed"
 	seedFeed(t, db, userName, feedName, "https://"+userName+".example/rss")
@@ -23,25 +23,14 @@ func seedBookmarkablePost(t *testing.T, db *sql.DB, userName, title, url string)
 // JSON array.
 func getBookmarks(t *testing.T, h http.Handler, key string) []map[string]any {
 	t.Helper()
-	rr := doAuthed(t, h, "GET", "/v1/bookmarks", "ApiKey "+key)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("bookmarks status = %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
-	}
-	var got []map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
-		t.Fatalf("response is not a JSON array: %v; body: %s", err, rr.Body.String())
-	}
-	if got == nil {
-		t.Fatalf("bookmarks = JSON null, want empty list; body: %s", rr.Body.String())
-	}
-	return got
+	return getJSONArray(t, h, key, "/v1/bookmarks")
 }
 
 func TestBookmarkRoundTrip(t *testing.T) {
 	h, db := testHandler(t)
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
-	url := seedBookmarkablePost(t, db, "alice", "a post", "https://alice.example/1")
+	url := seedFollowedPost(t, db, "alice", "a post", "https://alice.example/1")
 
 	if got := getBookmarks(t, h, key); len(got) != 0 {
 		t.Fatalf("new user's bookmarks = %d entries, want 0; entries: %v", len(got), got)
@@ -120,7 +109,7 @@ func TestBookmarkTwiceIsConflict(t *testing.T) {
 	h, db := testHandler(t)
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
-	url := seedBookmarkablePost(t, db, "alice", "a post", "https://alice.example/1")
+	url := seedFollowedPost(t, db, "alice", "a post", "https://alice.example/1")
 
 	body := `{"url": "` + url + `"}`
 	if rr := doAuthedJSON(t, h, "POST", "/v1/bookmarks", key, body); rr.Code != http.StatusCreated {
@@ -146,8 +135,8 @@ func TestBookmarksArePerUser(t *testing.T) {
 
 	aliceKey := registerAndLogin(t, h, "alice", "alice-pw")
 	bobKey := registerAndLogin(t, h, "bob", "bob-pw")
-	aliceURL := seedBookmarkablePost(t, db, "alice", "alice post", "https://alice.example/1")
-	bobURL := seedBookmarkablePost(t, db, "bob", "bob post", "https://bob.example/1")
+	aliceURL := seedFollowedPost(t, db, "alice", "alice post", "https://alice.example/1")
+	bobURL := seedFollowedPost(t, db, "bob", "bob post", "https://bob.example/1")
 
 	if rr := doAuthedJSON(t, h, "POST", "/v1/bookmarks", aliceKey, `{"url": "`+aliceURL+`"}`); rr.Code != http.StatusCreated {
 		t.Fatalf("alice bookmark status = %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())

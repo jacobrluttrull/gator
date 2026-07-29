@@ -33,6 +33,25 @@ func doJSON(t *testing.T, h http.Handler, method, path, body string) *httptest.R
 	return rr
 }
 
+// getJSONArray issues an authenticated GET and decodes a list response
+// body, failing the test on a non-200 or on JSON null (an empty list must
+// encode as []).
+func getJSONArray(t *testing.T, h http.Handler, key, path string) []map[string]any {
+	t.Helper()
+	rr := doAuthed(t, h, "GET", path, "ApiKey "+key)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want %d; body: %s", path, rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("GET %s response is not a JSON array: %v; body: %s", path, err, rr.Body.String())
+	}
+	if got == nil {
+		t.Fatalf("GET %s = JSON null, want empty list; body: %s", path, rr.Body.String())
+	}
+	return got
+}
+
 func TestRegisterCreatesUser(t *testing.T) {
 	h, _ := testHandler(t)
 

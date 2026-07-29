@@ -11,25 +11,14 @@ import (
 // response body into a JSON array.
 func search(t *testing.T, h http.Handler, key, query string) []map[string]any {
 	t.Helper()
-	rr := doAuthed(t, h, "GET", "/v1/search"+query, "ApiKey "+key)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("search%s status = %d, want %d; body: %s", query, rr.Code, http.StatusOK, rr.Body.String())
-	}
-	var got []map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
-		t.Fatalf("response is not a JSON array: %v; body: %s", err, rr.Body.String())
-	}
-	if got == nil {
-		t.Fatalf("search%s = JSON null, want empty list; body: %s", query, rr.Body.String())
-	}
-	return got
+	return getJSONArray(t, h, key, "/v1/search"+query)
 }
 
 func TestSearchFindsMisspelledTitle(t *testing.T) {
 	h, db := testHandler(t)
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
-	seedBookmarkablePost(t, db, "alice", "Introducing Golang Generics", "https://alice.example/1")
+	seedFollowedPost(t, db, "alice", "Introducing Golang Generics", "https://alice.example/1")
 	seedPost(t, db, "alice's Feed", "Kubernetes Networking", "https://alice.example/2", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
 
 	// Misspelled and differently cased: trigram similarity still matches.
@@ -54,8 +43,8 @@ func TestSearchOnlyCoversFollowedFeeds(t *testing.T) {
 	bobKey := registerAndLogin(t, h, "bob", "bob-pw")
 	// Disjoint Followings: each user follows only their own feed, so a hit
 	// from the other's feed is a leak.
-	seedBookmarkablePost(t, db, "alice", "Rust Ownership Explained", "https://alice.example/1")
-	seedBookmarkablePost(t, db, "bob", "Rust Ownership Revisited", "https://bob.example/1")
+	seedFollowedPost(t, db, "alice", "Rust Ownership Explained", "https://alice.example/1")
+	seedFollowedPost(t, db, "bob", "Rust Ownership Revisited", "https://bob.example/1")
 
 	for _, tc := range []struct {
 		user, key, wantTitle string
@@ -77,7 +66,7 @@ func TestSearchNoMatchesIsEmptyList(t *testing.T) {
 	h, db := testHandler(t)
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
-	seedBookmarkablePost(t, db, "alice", "Introducing Golang Generics", "https://alice.example/1")
+	seedFollowedPost(t, db, "alice", "Introducing Golang Generics", "https://alice.example/1")
 
 	if got := search(t, h, key, "?q=kubernetes+networking"); len(got) != 0 {
 		t.Errorf("search for an unrelated term = %d entries, want 0; entries: %v", len(got), got)
@@ -88,7 +77,7 @@ func TestSearchRespectsLimit(t *testing.T) {
 	h, db := testHandler(t)
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
-	seedBookmarkablePost(t, db, "alice", "Rust Ownership Explained", "https://alice.example/1")
+	seedFollowedPost(t, db, "alice", "Rust Ownership Explained", "https://alice.example/1")
 	seedPost(t, db, "alice's Feed", "Rust Ownership Revisited", "https://alice.example/2", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
 
 	if got := search(t, h, key, "?q=rust+ownershp"); len(got) != 2 {

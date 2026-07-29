@@ -23,15 +23,7 @@ func seedPost(t *testing.T, db *sql.DB, feedName, title, url string, publishedAt
 // response body into a JSON array.
 func getPosts(t *testing.T, h http.Handler, key, query string) []map[string]any {
 	t.Helper()
-	rr := doAuthed(t, h, "GET", "/v1/posts"+query, "ApiKey "+key)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("posts status = %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
-	}
-	var got []map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
-		t.Fatalf("response is not a JSON array: %v; body: %s", err, rr.Body.String())
-	}
-	return got
+	return getJSONArray(t, h, key, "/v1/posts"+query)
 }
 
 // seedThreePosts seeds one followed feed for the named user with three

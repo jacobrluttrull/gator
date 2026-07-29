@@ -26,7 +26,12 @@ which can then be browsed, searched, and bookmarked from the terminal.
   `{"feed": ..., "feed_follow": ...}`), errors as `{"error": "<message>"}`.
   Authenticated routes wrap an `authedHandler` with the `loggedIn` middleware (the HTTP
   analogue of `cli.LoggedIn`): it resolves `Authorization: ApiKey <key>` to a user and
-  fails closed with a uniform 401
+  fails closed with a uniform 401. One file per domain, mirroring `internal/handlers/`:
+  `register.go`, `login.go`, `feeds.go`, `follows.go`, `posts.go`, `bookmarks.go`
+  (`GET`/`POST`/`DELETE /v1/bookmarks`), `search.go` (`GET /v1/search?q=&limit=`).
+  Endpoints that identify a row by URL take it in a `{"url": ...}` body (`urlFromBody`);
+  list endpoints take an optional `limit` query param (`limitParam`) — both shared
+  helpers live in `api.go` and write their own 4xx responses
 - `internal/auth/` — pure helpers: bcrypt password hash/verify, API key generate/SHA-256 hash
 - `internal/feed/` — `Fetch`: HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
 - `internal/scraper/` — `Scrape`: pulls the next feed to fetch, marks it fetched, saves new posts;

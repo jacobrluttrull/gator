@@ -18,7 +18,9 @@ type SearchResult struct {
 }
 
 // handleSearch fuzzy-matches post titles among the caller's Followings,
-// mirroring the CLI's search command.
+// running the CLI search command's query. Unlike the CLI, a blank q is
+// rejected rather than matched on: the CLI can't be invoked without a
+// term, but a query string can.
 func handleSearch(db *database.Queries) authedHandler {
 	return func(w http.ResponseWriter, r *http.Request, user database.User) {
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
