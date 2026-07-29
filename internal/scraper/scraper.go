@@ -49,6 +49,9 @@ func Scrape(ctx context.Context, s *cli.State) error {
 	}
 
 	for _, item := range rssFeed.Channel.Item {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		_, err := s.DB.CreatePost(ctx, database.CreatePostParams{
 			ID:          uuid.New(),
 			CreatedAt:   time.Now().UTC(),

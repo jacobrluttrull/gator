@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"log"
@@ -19,19 +20,21 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pqErr) && pqErr.Code.Name() == "unique_violation"
 }
 
-// New returns the /v1 API handler backed by the given DB layer.
+// New returns the /v1 API handler backed by the given DB layer. conn is
+// the raw connection db wraps, needed by handlers (like handleAddFeed)
+// that must run more than one write in a single transaction.
 //
 // The routes are a table rather than a run of mux.HandleFunc calls
 // because handleUnmatched needs the same method/path pairs to answer 405
 // — one list keeps the Allow header from drifting from what's mounted.
-func New(db *database.Queries) http.Handler {
+func New(db *database.Queries, conn *sql.DB) http.Handler {
 	routes := []struct {
 		method, path string
 		handler      http.HandlerFunc
 	}{
 		{"POST", "/v1/register", handleRegister(db)},
 		{"POST", "/v1/login", handleLogin(db)},
-		{"POST", "/v1/feeds", loggedIn(db, handleAddFeed(db))},
+		{"POST", "/v1/feeds", loggedIn(db, handleAddFeed(db, conn))},
 		{"GET", "/v1/feeds", loggedIn(db, handleListFeeds(db))},
 		{"GET", "/v1/follows", loggedIn(db, handleListFollows(db))},
 		{"POST", "/v1/follows", loggedIn(db, handleCreateFollow(db))},

@@ -9,18 +9,33 @@ import (
 )
 
 // startRun runs Run in a goroutine, counting calls to scrape, and
-// returns the call counter plus a channel closed when Run returns.
-func startRun(ctx context.Context, interval time.Duration, scrape func() error) (*atomic.Int64, chan struct{}) {
+// returns the call counter plus a channel closed when Run returns. It
+// fails the test if Run itself returns an unexpected error.
+func startRun(t *testing.T, ctx context.Context, interval time.Duration, scrape func() error) (*atomic.Int64, chan struct{}) {
+	t.Helper()
 	var calls atomic.Int64
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		Run(ctx, interval, func(context.Context) error {
+		if err := Run(ctx, interval, func(context.Context) error {
 			calls.Add(1)
 			return scrape()
-		})
+		}); err != nil {
+			t.Errorf("Run returned unexpected error: %v", err)
+		}
 	}()
 	return &calls, done
+}
+
+// waitDone waits for done to close, failing the test instead of hanging
+// if Run never returns.
+func waitDone(t *testing.T, done chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run didn't return in time")
+	}
 }
 
 func TestRunRejectsNonPositiveInterval(t *testing.T) {
@@ -45,7 +60,7 @@ func TestRunScrapeSeesCancellation(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		Run(ctx, time.Hour, func(scrapeCtx context.Context) error {
+		if err := Run(ctx, time.Hour, func(scrapeCtx context.Context) error {
 			cancel()
 			select {
 			case <-scrapeCtx.Done():
@@ -53,7 +68,9 @@ func TestRunScrapeSeesCancellation(t *testing.T) {
 			case <-time.After(2 * time.Second):
 			}
 			return scrapeCtx.Err()
-		})
+		}); err != nil {
+			t.Errorf("Run returned unexpected error: %v", err)
+		}
 	}()
 
 	select {
@@ -61,7 +78,7 @@ func TestRunScrapeSeesCancellation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("scrape callback's context never saw the loop's cancellation")
 	}
-	<-done
+	waitDone(t, done)
 }
 
 func waitFor(t *testing.T, label string, cond func() bool) {
@@ -81,26 +98,26 @@ func TestRunScrapesImmediately(t *testing.T) {
 	defer cancel()
 
 	// An hour-long interval: any call at all must be the immediate one.
-	calls, done := startRun(ctx, time.Hour, func() error { return nil })
+	calls, done := startRun(t, ctx, time.Hour, func() error { return nil })
 	waitFor(t, "Run never scraped; want an immediate scrape before the first tick", func() bool {
 		return calls.Load() == 1
 	})
 
 	cancel()
-	<-done
+	waitDone(t, done)
 }
 
 func TestRunContinuesAfterScrapeFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	calls, done := startRun(ctx, time.Millisecond, func() error { return errors.New("feed exploded") })
+	calls, done := startRun(t, ctx, time.Millisecond, func() error { return errors.New("feed exploded") })
 	waitFor(t, "Run stopped after scrape failures; want it to log and keep going", func() bool {
 		return calls.Load() >= 3
 	})
 
 	cancel()
-	<-done
+	waitDone(t, done)
 }
 
 func TestRunContinuesAfterScrapePanic(t *testing.T) {
@@ -109,27 +126,23 @@ func TestRunContinuesAfterScrapePanic(t *testing.T) {
 
 	// ADR-0002: with no supervisor to respawn the process, the
 	// Aggregation goroutine recovers and logs internally.
-	calls, done := startRun(ctx, time.Millisecond, func() error { panic("feed exploded harder") })
+	calls, done := startRun(t, ctx, time.Millisecond, func() error { panic("feed exploded harder") })
 	waitFor(t, "Run stopped after a scrape panic; want it recovered and logged", func() bool {
 		return calls.Load() >= 3
 	})
 
 	cancel()
-	<-done
+	waitDone(t, done)
 }
 
 func TestRunStopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	calls, done := startRun(ctx, time.Millisecond, func() error { return nil })
+	calls, done := startRun(t, ctx, time.Millisecond, func() error { return nil })
 	waitFor(t, "Run never scraped", func() bool { return calls.Load() >= 1 })
 
 	cancel()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Run didn't return after context cancellation")
-	}
+	waitDone(t, done)
 
 	settled := calls.Load()
 	time.Sleep(20 * time.Millisecond)

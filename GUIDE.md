@@ -241,8 +241,8 @@ doubles as a quick check that a change didn't break anything.
 There are also `api-tests/gator.jetbrains.http` (GoLand, IntelliJ) and
 `api-tests/gator.http` (VS Code REST Client) if you'd rather click through the
 requests. Edit the name and password at the top and run them top to bottom. In
-Zed, use `run.sh` — its `.http` extension only colors the file, it can't send
-anything.
+Zed, stock syntax highlighting doesn't send requests — but extensions like
+AlbertoBarrago's REST Client can; if you don't have one, use `run.sh` instead.
 
 ---
 

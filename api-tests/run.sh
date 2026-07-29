@@ -73,6 +73,20 @@ count() { printf '%s' "$BODY" | grep -o '"id":"' | wc -l | tr -d ' '; }
 
 json() { echo "Content-Type: application/json"; }
 
+# JSON-escape a string for safe embedding inside a "..." body literal — quote
+# and backslash are the two bytes that break the surrounding JSON.
+json_escape() {
+    local s=$1
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    printf '%s' "$s"
+}
+
+NAME_JSON=$(json_escape "$NAME")
+PASSWORD_JSON=$(json_escape "$PASSWORD")
+FEED_NAME_JSON=$(json_escape "$FEED_NAME")
+FEED_URL_JSON=$(json_escape "$FEED_URL")
+
 # ─────────── preflight ───────────
 
 printf '%sgator API flow%s  %s%s as %s%s\n\n' "$BOLD" "$OFF" "$DIM" "$BASE" "$NAME" "$OFF"
@@ -89,13 +103,13 @@ fi
 #    `gator register` does NOT set one — that makes a CLI-only user.)
 #    409 just means you have run this before.
 req "1. register" "201 409" "$BASE/v1/register" -H "$(json)" \
-    -d "{\"name\":\"$NAME\",\"password\":\"$PASSWORD\"}"
+    -d "{\"name\":\"$NAME_JSON\",\"password\":\"$PASSWORD_JSON\"}"
 [ "$STATUS" = 409 ] && printf '%24s%suser already exists — fine, continuing%s\n' '' "$DIM" "$OFF"
 
 # 2. Verify the password and get an API key. This is the only time the
 #    plaintext key is ever shown; the DB stores only its SHA-256 hash.
 req "2. login" "200" "$BASE/v1/login" -H "$(json)" \
-    -d "{\"name\":\"$NAME\",\"password\":\"$PASSWORD\"}"
+    -d "{\"name\":\"$NAME_JSON\",\"password\":\"$PASSWORD_JSON\"}"
 KEY=$(field api_key)
 if [ -z "$KEY" ]; then
     printf '\n%sNo API key returned — everything below needs it, stopping.%s\n' "$RED" "$OFF"
@@ -109,7 +123,7 @@ AUTH="Authorization: ApiKey $KEY"
 # 3. Add the feed to the shared global pool AND follow it, in one step.
 #    Feeds exist once for everybody, fetched once no matter how many follow.
 req "3. add feed" "201 409" "$BASE/v1/feeds" -H "$AUTH" -H "$(json)" \
-    -d "{\"name\":\"$FEED_NAME\",\"url\":\"$FEED_URL\"}"
+    -d "{\"name\":\"$FEED_NAME_JSON\",\"url\":\"$FEED_URL_JSON\"}"
 [ "$STATUS" = 409 ] && printf '%24s%sfeed URL already in the pool — fine, step 6 follows it%s\n' '' "$DIM" "$OFF"
 
 # 4. Every feed anyone has added, with who added it — not just yours.
@@ -118,12 +132,12 @@ req "4. list feeds" "200" "$BASE/v1/feeds" -H "$AUTH"
 # 5. Unfollow by the feed's URL. Idempotent, so this is safe even on a first
 #    run. It goes before the follow purely so the script reruns cleanly.
 req "5. unfollow" "204" -X DELETE "$BASE/v1/follows" -H "$AUTH" -H "$(json)" \
-    -d "{\"url\":\"$FEED_URL\"}"
+    -d "{\"url\":\"$FEED_URL_JSON\"}"
 
 # 6. Follow a feed that already exists in the pool. This is what you use for
 #    somebody else's feed — step 3 only works for a brand new URL.
 req "6. follow" "201" "$BASE/v1/follows" -H "$AUTH" -H "$(json)" \
-    -d "{\"url\":\"$FEED_URL\"}"
+    -d "{\"url\":\"$FEED_URL_JSON\"}"
 
 # 7. Just the feeds you personally follow.
 req "7. list follows" "200" "$BASE/v1/follows" -H "$AUTH"
@@ -176,7 +190,7 @@ req "14. prove revoked" "401" "$BASE/v1/posts" -H "$AUTH"
 # instead of the 404/405/400 they are meant to demonstrate.
 
 req "    (re-login)" "200" "$BASE/v1/login" -H "$(json)" \
-    -d "{\"name\":\"$NAME\",\"password\":\"$PASSWORD\"}"
+    -d "{\"name\":\"$NAME_JSON\",\"password\":\"$PASSWORD_JSON\"}"
 AUTH="Authorization: ApiKey $(field api_key)"
 
 printf '\n%serror shapes%s\n' "$BOLD" "$OFF"

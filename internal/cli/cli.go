@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
 	"github.com/jacobrluttrull/gator/internal/config"
@@ -11,6 +12,10 @@ import (
 type State struct {
 	Config *config.Config
 	DB     *database.Queries
+	// Conn is the raw connection DB wraps, for handlers (namely the API's
+	// transactional endpoints) that need to start a transaction rather
+	// than issue independent queries through DB.
+	Conn *sql.DB
 }
 
 type Command struct {

@@ -27,6 +27,7 @@ func main() {
 	appState := &cli.State{
 		Config: &cfg,
 		DB:     dbQueries,
+		Conn:   db,
 	}
 
 	cmds := cli.Commands{

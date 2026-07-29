@@ -20,6 +20,11 @@ func Run(ctx context.Context, interval time.Duration, scrape func(context.Contex
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 		if err := safeScrape(ctx, scrape); err != nil {
 			log.Printf("scrape failed: %v", err)
 		}
