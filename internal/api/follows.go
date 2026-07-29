@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -28,18 +27,11 @@ type FeedFollow struct {
 // to a feed, writing the appropriate error response (400 on a bad body,
 // 404 on an unknown URL) itself when it can't.
 func feedFromURLBody(db *database.Queries, w http.ResponseWriter, r *http.Request) (database.Feed, bool) {
-	var params struct {
-		Url string `json:"url"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid JSON body")
+	url, ok := urlFromBody(w, r)
+	if !ok {
 		return database.Feed{}, false
 	}
-	if params.Url == "" {
-		respondError(w, http.StatusBadRequest, "url is required")
-		return database.Feed{}, false
-	}
-	feed, err := db.GetFeedByUrl(r.Context(), params.Url)
+	feed, err := db.GetFeedByUrl(r.Context(), url)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "no feed with that url")

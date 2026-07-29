@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,16 +24,35 @@ type Post struct {
 	FeedID      uuid.UUID `json:"feed_id"`
 }
 
+// postFromRow converts a posts-table row into its API view.
+func postFromRow(row database.Post) Post {
+	return Post{
+		ID:          row.ID,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+		Title:       row.Title,
+		Url:         row.Url,
+		Description: row.Description,
+		PublishedAt: row.PublishedAt,
+		FeedID:      row.FeedID,
+	}
+}
+
+// postsFromRows converts posts-table rows into their API views. The result
+// is never nil, so an empty list encodes as [] rather than null.
+func postsFromRows(rows []database.Post) []Post {
+	posts := make([]Post, 0, len(rows))
+	for _, row := range rows {
+		posts = append(posts, postFromRow(row))
+	}
+	return posts
+}
+
 func handleListPosts(db *database.Queries) authedHandler {
 	return func(w http.ResponseWriter, r *http.Request, user database.User) {
-		limit := defaultPostsLimit
-		if raw := r.URL.Query().Get("limit"); raw != "" {
-			parsed, err := strconv.Atoi(raw)
-			if err != nil || parsed <= 0 {
-				respondError(w, http.StatusBadRequest, "invalid limit")
-				return
-			}
-			limit = parsed
+		limit, ok := limitParam(w, r, defaultPostsLimit)
+		if !ok {
+			return
 		}
 		rows, err := db.GetPostsForUser(r.Context(), database.GetPostsForUserParams{
 			UserID: user.ID,
@@ -45,19 +63,6 @@ func handleListPosts(db *database.Queries) authedHandler {
 			respondError(w, http.StatusInternalServerError, "couldn't list posts")
 			return
 		}
-		posts := make([]Post, 0, len(rows))
-		for _, row := range rows {
-			posts = append(posts, Post{
-				ID:          row.ID,
-				CreatedAt:   row.CreatedAt,
-				UpdatedAt:   row.UpdatedAt,
-				Title:       row.Title,
-				Url:         row.Url,
-				Description: row.Description,
-				PublishedAt: row.PublishedAt,
-				FeedID:      row.FeedID,
-			})
-		}
-		respondJSON(w, http.StatusOK, posts)
+		respondJSON(w, http.StatusOK, postsFromRows(rows))
 	}
 }

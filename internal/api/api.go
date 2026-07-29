@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/lib/pq"
 
@@ -27,7 +28,44 @@ func New(db *database.Queries) http.Handler {
 	mux.HandleFunc("POST /v1/follows", loggedIn(db, handleCreateFollow(db)))
 	mux.HandleFunc("DELETE /v1/follows", loggedIn(db, handleDeleteFollow(db)))
 	mux.HandleFunc("GET /v1/posts", loggedIn(db, handleListPosts(db)))
+	mux.HandleFunc("GET /v1/bookmarks", loggedIn(db, handleListBookmarks(db)))
+	mux.HandleFunc("POST /v1/bookmarks", loggedIn(db, handleCreateBookmark(db)))
+	mux.HandleFunc("DELETE /v1/bookmarks", loggedIn(db, handleDeleteBookmark(db)))
+	mux.HandleFunc("GET /v1/search", loggedIn(db, handleSearch(db)))
 	return mux
+}
+
+// urlFromBody decodes a `{"url": ...}` request body, writing a 400 error
+// response itself when the body is missing or has no url.
+func urlFromBody(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var params struct {
+		Url string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON body")
+		return "", false
+	}
+	if params.Url == "" {
+		respondError(w, http.StatusBadRequest, "url is required")
+		return "", false
+	}
+	return params.Url, true
+}
+
+// limitParam reads the optional `limit` query parameter, falling back to
+// def when it's absent and writing a 400 error response itself when it's
+// present but not a positive integer.
+func limitParam(w http.ResponseWriter, r *http.Request, def int) (int, bool) {
+	raw := r.URL.Query().Get("limit")
+	if raw == "" {
+		return def, true
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		respondError(w, http.StatusBadRequest, "invalid limit")
+		return 0, false
+	}
+	return parsed, true
 }
 
 func respondJSON(w http.ResponseWriter, status int, payload any) {
