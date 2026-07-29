@@ -136,7 +136,8 @@ func TestPostsInvalidLimitIs400(t *testing.T) {
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
 
-	for _, query := range []string{"?limit=abc", "?limit=1.5", "?limit=0", "?limit=-1"} {
+	// 2147483648 is int32 overflow: it must not wrap into a negative LIMIT.
+	for _, query := range []string{"?limit=abc", "?limit=1.5", "?limit=0", "?limit=-1", "?limit=2147483648"} {
 		rr := doAuthed(t, h, "GET", "/v1/posts"+query, "ApiKey "+key)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("posts%s status = %d, want %d; body: %s", query, rr.Code, http.StatusBadRequest, rr.Body.String())

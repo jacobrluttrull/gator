@@ -54,18 +54,20 @@ func urlFromBody(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // limitParam reads the optional `limit` query parameter, falling back to
 // def when it's absent and writing a 400 error response itself when it's
-// present but not a positive integer.
-func limitParam(w http.ResponseWriter, r *http.Request, def int) (int, bool) {
+// present but not a positive integer. It parses at the int32 width the
+// sqlc params take, so an out-of-range limit is a clean 400 rather than a
+// value that wraps negative and reaches Postgres as `LIMIT -2147483648`.
+func limitParam(w http.ResponseWriter, r *http.Request, def int32) (int32, bool) {
 	raw := r.URL.Query().Get("limit")
 	if raw == "" {
 		return def, true
 	}
-	parsed, err := strconv.Atoi(raw)
+	parsed, err := strconv.ParseInt(raw, 10, 32)
 	if err != nil || parsed <= 0 {
 		respondError(w, http.StatusBadRequest, "invalid limit")
 		return 0, false
 	}
-	return parsed, true
+	return int32(parsed), true
 }
 
 func respondJSON(w http.ResponseWriter, status int, payload any) {

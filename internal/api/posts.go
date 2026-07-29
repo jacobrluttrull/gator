@@ -56,7 +56,7 @@ func handleListPosts(db *database.Queries) authedHandler {
 		}
 		rows, err := db.GetPostsForUser(r.Context(), database.GetPostsForUserParams{
 			UserID: user.ID,
-			Limit:  int32(limit),
+			Limit:  limit,
 			Offset: 0,
 		})
 		if err != nil {

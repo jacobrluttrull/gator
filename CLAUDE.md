@@ -30,8 +30,8 @@ which can then be browsed, searched, and bookmarked from the terminal.
   `register.go`, `login.go`, `feeds.go`, `follows.go`, `posts.go`, `bookmarks.go`
   (`GET`/`POST`/`DELETE /v1/bookmarks`), `search.go` (`GET /v1/search?q=&limit=`).
   Endpoints that identify a row by URL take it in a `{"url": ...}` body (`urlFromBody`);
-  list endpoints take an optional `limit` query param (`limitParam`) — both shared
-  helpers live in `api.go` and write their own 4xx responses
+  `/v1/posts` and `/v1/search` take an optional `limit` query param (`limitParam`) —
+  both shared helpers live in `api.go` and write their own 4xx responses
 - `internal/auth/` — pure helpers: bcrypt password hash/verify, API key generate/SHA-256 hash
 - `internal/feed/` — `Fetch`: HTTP fetch + XML parsing of an RSS feed into `RSSFeed`/`RSSItem`
 - `internal/scraper/` — `Scrape`: pulls the next feed to fetch, marks it fetched, saves new posts;

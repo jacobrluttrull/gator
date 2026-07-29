@@ -18,8 +18,8 @@ func TestSearchFindsMisspelledTitle(t *testing.T) {
 	h, db := testHandler(t)
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
-	seedFollowedPost(t, db, "alice", "Introducing Golang Generics", "https://alice.example/1")
-	seedPost(t, db, "alice's Feed", "Kubernetes Networking", "https://alice.example/2", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
+	feedName := seedFollowedPost(t, db, "alice", "Introducing Golang Generics", "https://alice.example/1")
+	seedPost(t, db, feedName, "Kubernetes Networking", "https://alice.example/2", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
 
 	// Misspelled and differently cased: trigram similarity still matches.
 	for _, query := range []string{"?q=goland+generics", "?q=GOLAND+GENERICS"} {
@@ -77,8 +77,8 @@ func TestSearchRespectsLimit(t *testing.T) {
 	h, db := testHandler(t)
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
-	seedFollowedPost(t, db, "alice", "Rust Ownership Explained", "https://alice.example/1")
-	seedPost(t, db, "alice's Feed", "Rust Ownership Revisited", "https://alice.example/2", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
+	feedName := seedFollowedPost(t, db, "alice", "Rust Ownership Explained", "https://alice.example/1")
+	seedPost(t, db, feedName, "Rust Ownership Revisited", "https://alice.example/2", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
 
 	if got := search(t, h, key, "?q=rust+ownershp"); len(got) != 2 {
 		t.Fatalf("search without limit = %d entries, want both matches; entries: %v", len(got), got)
@@ -111,7 +111,8 @@ func TestSearchInvalidLimitIs400(t *testing.T) {
 
 	key := registerAndLogin(t, h, "alice", "alice-pw")
 
-	for _, query := range []string{"?q=rust&limit=abc", "?q=rust&limit=0", "?q=rust&limit=-1"} {
+	// 2147483648 is int32 overflow: it must not wrap into a negative LIMIT.
+	for _, query := range []string{"?q=rust&limit=abc", "?q=rust&limit=0", "?q=rust&limit=-1", "?q=rust&limit=2147483648"} {
 		rr := doAuthed(t, h, "GET", "/v1/search"+query, "ApiKey "+key)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("search%s status = %d, want %d; body: %s", query, rr.Code, http.StatusBadRequest, rr.Body.String())

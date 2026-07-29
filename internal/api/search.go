@@ -36,7 +36,7 @@ func handleSearch(db *database.Queries) authedHandler {
 		rows, err := db.SearchPosts(r.Context(), database.SearchPostsParams{
 			UserID: user.ID,
 			Lower:  query,
-			Limit:  int32(limit),
+			Limit:  limit,
 		})
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "couldn't search posts")
