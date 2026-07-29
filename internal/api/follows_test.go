@@ -65,8 +65,8 @@ func seedFeed(t *testing.T, db *sql.DB, ownerName, feedName, feedURL string) {
 	)
 }
 
-// seedFollow subscribes the named user to the named feed, bypassing the
-// API (there is no follow endpoint yet).
+// seedFollow subscribes the named user to the named feed directly in the
+// database, keeping this test independent of the follow endpoints.
 func seedFollow(t *testing.T, db *sql.DB, userName, feedName string) {
 	t.Helper()
 	seedExec(t, db, "seeding follow of "+feedName+" for "+userName, `
@@ -136,6 +136,138 @@ func TestFollowsListsOnlyOwnFollowings(t *testing.T) {
 				tc.user, got[0].UserName, got[0].FeedName, tc.user, tc.wantFeed)
 		}
 	}
+}
+
+func TestFollowThenUnfollowRoundTrip(t *testing.T) {
+	h, _ := testHandler(t)
+
+	aliceKey := registerAndLogin(t, h, "alice", "alice-pw")
+	bobKey := registerAndLogin(t, h, "bob", "bob-pw")
+	if rr := doAuthedJSON(t, h, "POST", "/v1/feeds", aliceKey,
+		`{"name": "Alice's Feed", "url": "https://alice.example/rss"}`); rr.Code != http.StatusCreated {
+		t.Fatalf("alice add feed status = %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+
+	// Bob follows alice's feed by URL.
+	rr := doAuthedJSON(t, h, "POST", "/v1/follows", bobKey, `{"url": "https://alice.example/rss"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("follow status = %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+	var follow struct {
+		UserName string `json:"user_name"`
+		FeedName string `json:"feed_name"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &follow); err != nil {
+		t.Fatalf("follow response is not valid JSON: %v; body: %s", err, rr.Body.String())
+	}
+	if follow.UserName != "bob" || follow.FeedName != "Alice's Feed" {
+		t.Errorf("follow = {user_name: %q, feed_name: %q}, want {%q, %q}",
+			follow.UserName, follow.FeedName, "bob", "Alice's Feed")
+	}
+
+	// The new Following is visible in the next GET /v1/follows.
+	if got := listFollowedFeedNames(t, h, bobKey); len(got) != 1 || got[0] != "Alice's Feed" {
+		t.Fatalf("bob's follows after follow = %v, want [Alice's Feed]", got)
+	}
+
+	// Unfollowing removes it.
+	rr = doAuthedJSON(t, h, "DELETE", "/v1/follows", bobKey, `{"url": "https://alice.example/rss"}`)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("unfollow status = %d, want %d; body: %s", rr.Code, http.StatusNoContent, rr.Body.String())
+	}
+	if got := listFollowedFeedNames(t, h, bobKey); len(got) != 0 {
+		t.Errorf("bob's follows after unfollow = %v, want none", got)
+	}
+
+	// Alice's own follow (from adding the feed) is untouched.
+	if got := listFollowedFeedNames(t, h, aliceKey); len(got) != 1 || got[0] != "Alice's Feed" {
+		t.Errorf("alice's follows after bob unfollows = %v, want [Alice's Feed]", got)
+	}
+}
+
+func TestFollowDuplicateIsClean409(t *testing.T) {
+	h, _ := testHandler(t)
+
+	aliceKey := registerAndLogin(t, h, "alice", "alice-pw")
+	bobKey := registerAndLogin(t, h, "bob", "bob-pw")
+	if rr := doAuthedJSON(t, h, "POST", "/v1/feeds", aliceKey,
+		`{"name": "Alice's Feed", "url": "https://alice.example/rss"}`); rr.Code != http.StatusCreated {
+		t.Fatalf("alice add feed status = %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+
+	if rr := doAuthedJSON(t, h, "POST", "/v1/follows", bobKey, `{"url": "https://alice.example/rss"}`); rr.Code != http.StatusCreated {
+		t.Fatalf("first follow status = %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+
+	// Re-following, and following a feed you already follow from adding
+	// it, both fail cleanly.
+	for _, tc := range []struct{ user, key string }{{"bob", bobKey}, {"alice", aliceKey}} {
+		rr := doAuthedJSON(t, h, "POST", "/v1/follows", tc.key, `{"url": "https://alice.example/rss"}`)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("%s duplicate follow status = %d, want %d; body: %s", tc.user, rr.Code, http.StatusConflict, rr.Body.String())
+		}
+		var got map[string]string
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || got["error"] == "" {
+			t.Errorf("%s duplicate follow: want error-shape JSON, got: %s", tc.user, rr.Body.String())
+		}
+	}
+}
+
+func TestFollowUnknownURLIs404(t *testing.T) {
+	h, _ := testHandler(t)
+
+	key := registerAndLogin(t, h, "alice", "s3cret-pw")
+
+	for _, method := range []string{"POST", "DELETE"} {
+		rr := doAuthedJSON(t, h, method, "/v1/follows", key, `{"url": "https://nobody.example/rss"}`)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("%s unknown url status = %d, want %d; body: %s", method, rr.Code, http.StatusNotFound, rr.Body.String())
+		}
+		var got map[string]string
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || got["error"] == "" {
+			t.Errorf("%s unknown url: want error-shape JSON, got: %s", method, rr.Body.String())
+		}
+	}
+}
+
+func TestFollowMissingURLIs400(t *testing.T) {
+	h, _ := testHandler(t)
+
+	key := registerAndLogin(t, h, "alice", "s3cret-pw")
+
+	for _, method := range []string{"POST", "DELETE"} {
+		for _, body := range []string{`{}`, `not json`} {
+			rr := doAuthedJSON(t, h, method, "/v1/follows", key, body)
+			if rr.Code != http.StatusBadRequest {
+				t.Errorf("%s with body %q: status = %d, want %d", method, body, rr.Code, http.StatusBadRequest)
+			}
+			var got map[string]string
+			if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || got["error"] == "" {
+				t.Errorf("%s with body %q: want error-shape JSON, got: %s", method, body, rr.Body.String())
+			}
+		}
+	}
+}
+
+// listFollowedFeedNames returns the feed names in the user's GET
+// /v1/follows response.
+func listFollowedFeedNames(t *testing.T, h http.Handler, key string) []string {
+	t.Helper()
+	rr := doAuthed(t, h, "GET", "/v1/follows", "ApiKey "+key)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("follows status = %d, want %d; body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var rows []struct {
+		FeedName string `json:"feed_name"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("follows is not a JSON array: %v; body: %s", err, rr.Body.String())
+	}
+	names := make([]string, 0, len(rows))
+	for _, row := range rows {
+		names = append(names, row.FeedName)
+	}
+	return names
 }
 
 func TestFollowsFailsClosed(t *testing.T) {

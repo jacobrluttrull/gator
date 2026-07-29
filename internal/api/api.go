@@ -21,7 +21,11 @@ func New(db *database.Queries) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/register", handleRegister(db))
 	mux.HandleFunc("POST /v1/login", handleLogin(db))
+	mux.HandleFunc("POST /v1/feeds", loggedIn(db, handleAddFeed(db)))
+	mux.HandleFunc("GET /v1/feeds", loggedIn(db, handleListFeeds(db)))
 	mux.HandleFunc("GET /v1/follows", loggedIn(db, handleListFollows(db)))
+	mux.HandleFunc("POST /v1/follows", loggedIn(db, handleCreateFollow(db)))
+	mux.HandleFunc("DELETE /v1/follows", loggedIn(db, handleDeleteFollow(db)))
 	return mux
 }
 

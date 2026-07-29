@@ -22,7 +22,8 @@ which can then be browsed, searched, and bookmarked from the terminal.
   ADR-0002, `-port` and `-interval` flags)
 - `internal/api/` — `New(db)` returns the `/v1` `http.Handler` (REST API per ADR-0001/0002);
   handlers respond with sqlc-row-mirror JSON (except login, which returns the one-time
-  `{"api_key": ...}` — the row only holds the hash), errors as `{"error": "<message>"}`.
+  `{"api_key": ...}` — the row only holds the hash; add-feed nests two mirrors as
+  `{"feed": ..., "feed_follow": ...}`), errors as `{"error": "<message>"}`.
   Authenticated routes wrap an `authedHandler` with the `loggedIn` middleware (the HTTP
   analogue of `cli.LoggedIn`): it resolves `Authorization: ApiKey <key>` to a user and
   fails closed with a uniform 401
