@@ -11,9 +11,8 @@ There are two ways in, over the same database:
 - **API** — the network surface. Every request needs an API key, and API keys
   come from a password login.
 
-See [GUIDE.md](GUIDE.md) for the full walkthrough: how a command and a request
-flow end to end, the data model, the aggregation loop, the complete API
-reference, and a debugging playbook.
+This page is the short version: install, the command list, the endpoint list.
+[GUIDE.md](GUIDE.md) walks you through actually using it.
 
 ## Requirements
 
@@ -32,25 +31,18 @@ That drops a `gator` binary in `$GOPATH/bin` (usually `$HOME/go/bin`) — make
 sure that's on your `PATH`. Note the `/cmd/gator` suffix: the binary is not at
 the module root.
 
-## Setup
+Then create the database, point a `~/.gatorconfig.json` at it, and apply the
+migrations:
 
-1. Create the database:
-   ```
-   createdb gator
-   ```
-2. Create `~/.gatorconfig.json` (in your **home directory** — the config is read
-   from `$HOME` and nowhere else; a copy in the repo root is ignored by git and
-   never loaded):
-   ```json
-   {
-     "db_url": "postgres://user:password@localhost:5432/gator?sslmode=disable"
-   }
-   ```
-   `current_user_name` gets written in for you by `register` / `login`.
-3. Apply migrations:
-   ```
-   goose -dir sql/schema postgres "postgres://user:password@localhost:5432/gator?sslmode=disable" up
-   ```
+```bash
+createdb gator
+printf '{"db_url":"postgres://user:password@localhost:5432/gator?sslmode=disable"}\n' > ~/.gatorconfig.json
+goose -dir sql/schema postgres "postgres://user:password@localhost:5432/gator?sslmode=disable" up
+```
+
+The config is read from `$HOME` and nowhere else; `current_user_name` gets
+written in for you by `register` / `login`. [GUIDE.md → Setup](GUIDE.md#setup)
+spells all of this out.
 
 ## Quick start
 
@@ -114,8 +106,21 @@ All under `/v1`. Everything except `register` and `login` needs
 | GET | `/v1/search` | `?q=` (required) `&limit=` (default 5) | 200 posts + `sim` score |
 | DELETE | `/v1/keys` | — | 204 — revokes **all** your API keys |
 
-Admin verbs (`reset`, `users`) are CLI-only on purpose. Full request/response
-shapes and `curl` examples are in [GUIDE.md](GUIDE.md#api-reference).
+Admin verbs (`reset`, `users`) are CLI-only on purpose — there's no way to wipe
+the database over HTTP.
+
+`api-tests/` runs the whole flow against a live server, with the API key
+captured from the login response for you:
+
+```bash
+gator serve -port 8080 -interval 1m   # in one terminal
+./api-tests/run.sh                     # in another
+```
+
+`run.sh` is plain curl and bash, prints a pass/fail table, and exits non-zero on
+failure, so it doubles as a smoke test. There are `.http` files next to it for
+GoLand/IntelliJ and the VS Code REST Client — see
+[GUIDE.md → Trying it without writing any code](GUIDE.md#trying-it-without-writing-any-code).
 
 ## Project layout
 
@@ -146,28 +151,12 @@ go build ./...                                 # confirm it still compiles
 GATOR_TEST_DB_URL="postgres://postgres:postgres@localhost:5432/gator_test?sslmode=disable" go test ./...
 ```
 
-## Poking at the API
-
-`api-tests/` has the whole user flow — register, login, add feed, follow,
-browse, bookmark, search, revoke — with the API key captured from the login
-response automatically. Edit the name and password at the top and run it.
-
-```bash
-gator serve -port 8080 -interval 1m   # in one terminal
-./api-tests/run.sh                     # in another
-```
-
-- `api-tests/run.sh` — curl + bash, needs nothing installed. Prints a pass/fail
-  table and exits non-zero on failure, so it also works as a smoke test
-- `api-tests/gator.jetbrains.http` — GoLand / IntelliJ's built-in HTTP client
-- `api-tests/gator.http` — VS Code REST Client syntax (also httpYac, Postman, Insomnia)
-
-Zed note: the `http` extension in Zed's registry only *highlights* `.http`
-files — it can't send requests. Use `run.sh` from Zed's terminal.
+Without `GATOR_TEST_DB_URL` those tests skip rather than fail, so a green
+`go test ./...` doesn't prove they ran.
 
 ## Further reading
 
-- [GUIDE.md](GUIDE.md) — the deep guide: architecture, data model, API reference, debugging
+- [GUIDE.md](GUIDE.md) — the walkthrough: setup, everyday commands, driving the API from a script
 - [CONTEXT.md](CONTEXT.md) — the vocabulary (Feed vs Following, API key vs API login, ...)
 - [docs/adr/](docs/adr/) — why the two-surface trust model and the single-process Service
 - [EXTENDING.md](EXTENDING.md) — ideas not built yet

@@ -158,8 +158,7 @@ fi
 #     0 hits is NOT a failure. similarity() compares the whole title to the
 #     whole term against a 0.3 threshold, so one short word out of a long title
 #     scores too low to match even when it is literally in the title. Use more
-#     words. See GUIDE.md → "Search returns nothing for a word that's obviously
-#     in a title".
+#     words.
 req "12. search" "200" --get "$BASE/v1/search" --data-urlencode "q=$SEARCH" -d "limit=10" -H "$AUTH"
 printf '%24s%s%s hit(s) for %s%s\n' '' "$DIM" "$(count)" "$SEARCH" "$OFF"
 
