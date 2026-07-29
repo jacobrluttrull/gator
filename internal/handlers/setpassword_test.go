@@ -172,3 +172,140 @@ func TestSetPasswordRejectsOverlongPassword(t *testing.T) {
 		t.Errorf("original password no longer verifies after a rejected setpassword: %v", err)
 	}
 }
+
+// TestSetPasswordRevokesExistingKeys is the point of the revocation work:
+// a user who thinks a key has leaked sets a new password, and the leaked
+// key must stop working immediately — not merely stop being reissued.
+func TestSetPasswordRevokesExistingKeys(t *testing.T) {
+	db := testsupport.OpenTestDB(t)
+	queries := database.New(db)
+	ctx := context.Background()
+	h := api.New(queries)
+
+	// A user with a password and two live keys, as if logged in twice.
+	if rr := apiRegister(t, h, "leaky", "first-pw"); rr.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d; body: %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+	firstKey := apiKeyFromLogin(t, h, "leaky", "first-pw")
+	secondKey := apiKeyFromLogin(t, h, "leaky", "first-pw")
+	for name, key := range map[string]string{"first": firstKey, "second": secondKey} {
+		if !keyAuthenticates(t, h, key) {
+			t.Fatalf("%s key doesn't authenticate before setpassword; nothing to revoke", name)
+		}
+	}
+
+	user, err := queries.GetUser(ctx, "leaky")
+	if err != nil {
+		t.Fatalf("reading user: %v", err)
+	}
+	s := &cli.State{Config: &config.Config{CurrentUserName: "leaky"}, DB: queries}
+	if err := SetPassword(s, cli.Command{Name: "setpassword", Args: []string{"second-pw"}}, user); err != nil {
+		t.Fatalf("setpassword: %v", err)
+	}
+
+	// Both pre-existing keys are dead.
+	if keyAuthenticates(t, h, firstKey) {
+		t.Error("a key issued before setpassword still authenticates after it")
+	}
+	if keyAuthenticates(t, h, secondKey) {
+		t.Error("a second pre-existing key survived setpassword")
+	}
+	var remaining int
+	if err := db.QueryRow(`
+		select count(*) from api_keys k join users u on u.id = k.user_id
+		where u.name = 'leaky'`).Scan(&remaining); err != nil {
+		t.Fatalf("counting keys: %v", err)
+	}
+	if remaining != 0 {
+		t.Errorf("api_keys rows for the user after setpassword = %d, want 0", remaining)
+	}
+
+	// The password write itself landed, and a key issued after it works.
+	if rr := apiLogin(t, h, "leaky", "first-pw"); rr.Code != http.StatusUnauthorized {
+		t.Errorf("login with the old password = %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+	fresh := apiKeyFromLogin(t, h, "leaky", "second-pw")
+	if !keyAuthenticates(t, h, fresh) {
+		t.Error("a key issued after setpassword doesn't authenticate")
+	}
+}
+
+// TestSetPasswordRevocationIsPerUser keeps one user's password change from
+// logging everybody else out.
+func TestSetPasswordRevocationIsPerUser(t *testing.T) {
+	queries := database.New(testsupport.OpenTestDB(t))
+	ctx := context.Background()
+	h := api.New(queries)
+
+	for _, name := range []string{"alice", "bob"} {
+		if rr := apiRegister(t, h, name, "pw-"+name); rr.Code != http.StatusCreated {
+			t.Fatalf("register %s status = %d; body: %s", name, rr.Code, rr.Body.String())
+		}
+	}
+	aliceKey := apiKeyFromLogin(t, h, "alice", "pw-alice")
+	bobKey := apiKeyFromLogin(t, h, "bob", "pw-bob")
+
+	alice, err := queries.GetUser(ctx, "alice")
+	if err != nil {
+		t.Fatalf("reading alice: %v", err)
+	}
+	s := &cli.State{Config: &config.Config{CurrentUserName: "alice"}, DB: queries}
+	if err := SetPassword(s, cli.Command{Name: "setpassword", Args: []string{"new-pw"}}, alice); err != nil {
+		t.Fatalf("setpassword: %v", err)
+	}
+
+	if keyAuthenticates(t, h, aliceKey) {
+		t.Error("alice's key survived her own setpassword")
+	}
+	if !keyAuthenticates(t, h, bobKey) {
+		t.Error("bob's key was revoked by alice's setpassword")
+	}
+}
+
+// apiRegister registers a user over the API.
+func apiRegister(t *testing.T, h http.Handler, name, password string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(map[string]string{"name": name, "password": password})
+	if err != nil {
+		t.Fatalf("marshaling register body: %v", err)
+	}
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/v1/register", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr
+}
+
+// apiKeyFromLogin logs in over the API and returns the issued key.
+func apiKeyFromLogin(t *testing.T, h http.Handler, name, password string) string {
+	t.Helper()
+	rr := apiLogin(t, h, name, password)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("login %s status = %d, want %d; body: %s", name, rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var got struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || got.APIKey == "" {
+		t.Fatalf("login %s returned no api_key: %s", name, rr.Body.String())
+	}
+	return got.APIKey
+}
+
+// keyAuthenticates reports whether a key still works on an authed route.
+func keyAuthenticates(t *testing.T, h http.Handler, key string) bool {
+	t.Helper()
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/v1/follows", nil)
+	req.Header.Set("Authorization", "ApiKey "+key)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	switch rr.Code {
+	case http.StatusOK:
+		return true
+	case http.StatusUnauthorized:
+		return false
+	default:
+		t.Fatalf("GET /v1/follows = %d, want 200 or 401; body: %s", rr.Code, rr.Body.String())
+		return false
+	}
+}

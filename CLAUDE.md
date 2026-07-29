@@ -28,7 +28,8 @@ which can then be browsed, searched, and bookmarked from the terminal.
   analogue of `cli.LoggedIn`): it resolves `Authorization: ApiKey <key>` to a user and
   fails closed with a uniform 401. One file per domain, mirroring `internal/handlers/`:
   `register.go`, `login.go`, `feeds.go`, `follows.go`, `posts.go`, `bookmarks.go`
-  (`GET`/`POST`/`DELETE /v1/bookmarks`), `search.go` (`GET /v1/search?q=&limit=`).
+  (`GET`/`POST`/`DELETE /v1/bookmarks`), `search.go` (`GET /v1/search?q=&limit=`),
+  `keys.go` (`DELETE /v1/keys` — revokes all the caller's API keys).
   Endpoints that identify a row by URL take it in a `{"url": ...}` body (`urlFromBody`);
   `/v1/posts` and `/v1/search` take an optional `limit` query param (`limitParam`) —
   both shared helpers live in `api.go` and write their own 4xx responses. Routes are a

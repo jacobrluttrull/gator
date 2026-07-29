@@ -14,10 +14,16 @@ import (
 )
 
 const setUserPassword = `-- name: SetUserPassword :exec
-UPDATE users
-SET password_hash = $2,
-    updated_at    = $3
-WHERE id = $1
+WITH updated_user AS (
+    UPDATE users
+    SET password_hash = $2,
+        updated_at    = $3
+    WHERE users.id = $1
+    RETURNING users.id
+)
+DELETE FROM api_keys
+USING updated_user
+WHERE api_keys.user_id = updated_user.id
 `
 
 type SetUserPasswordParams struct {
@@ -26,6 +32,10 @@ type SetUserPasswordParams struct {
 	UpdatedAt    time.Time
 }
 
+// Setting a password also revokes every API key the user holds: a key
+// issued against the old password must not outlive it. Both happen in one
+// data-modifying CTE, so there is no window where the password has changed
+// but the old keys still authenticate.
 func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error {
 	_, err := q.db.ExecContext(ctx, setUserPassword, arg.ID, arg.PasswordHash, arg.UpdatedAt)
 	return err

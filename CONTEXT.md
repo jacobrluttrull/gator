@@ -26,11 +26,18 @@ _Avoid_: server, daemon, worker
 
 **API key**:
 A long-lived credential issued at API login and presented on every API request to
-identify the user. Revocable per user.
+identify the user. A user may hold several at once, one per client.
 _Avoid_: token, session
 
 **API login**:
 Verifying a user's password and issuing an API key. Distinct from CLI login.
+Additive: it never invalidates a key issued earlier.
+
+**Revocation**:
+Destroying all of a user's API keys at once — `DELETE /v1/keys` over the API, or as
+part of a CLI `setpassword`. Keys never expire (ADR-0001), so revoking is the only
+way one ever stops working.
+_Avoid_: logout, expiry, rotation
 
 **CLI login**:
 Selecting which user the CLI acts as (no password involved).

@@ -41,6 +41,7 @@ func New(db *database.Queries) http.Handler {
 		{"POST", "/v1/bookmarks", loggedIn(db, handleCreateBookmark(db))},
 		{"DELETE", "/v1/bookmarks", loggedIn(db, handleDeleteBookmark(db))},
 		{"GET", "/v1/search", loggedIn(db, handleSearch(db))},
+		{"DELETE", "/v1/keys", loggedIn(db, handleRevokeKeys(db))},
 	}
 
 	mux := http.NewServeMux()

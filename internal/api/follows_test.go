@@ -17,6 +17,15 @@ func registerAndLogin(t *testing.T, h http.Handler, name, password string) strin
 	if rr := doJSON(t, h, "POST", "/v1/register", body); rr.Code != http.StatusCreated {
 		t.Fatalf("register %s status = %d, want %d; body: %s", name, rr.Code, http.StatusCreated, rr.Body.String())
 	}
+	return loginForKey(t, h, name, password)
+}
+
+// loginForKey logs an already-registered user in and returns the issued
+// API key. Login is additive, so calling it again leaves earlier keys
+// valid and hands back a new one.
+func loginForKey(t *testing.T, h http.Handler, name, password string) string {
+	t.Helper()
+	body := `{"name": "` + name + `", "password": "` + password + `"}`
 	rr := doJSON(t, h, "POST", "/v1/login", body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("login %s status = %d, want %d; body: %s", name, rr.Code, http.StatusOK, rr.Body.String())
